@@ -36,9 +36,13 @@ class SimNode : public mesh::Mesh {
 
 protected:
     // ---- mesh::Mesh overrides ----
-    bool  allowPacketForward(const mesh::Packet* packet) override;
-    int   searchPeersByHash(const uint8_t* hash) override;
-    void  getPeerSharedSecret(uint8_t* dest_secret, int peer_idx) override;
+    bool     allowPacketForward(const mesh::Packet* packet) override;
+    int      searchPeersByHash(const uint8_t* hash) override;
+    void     getPeerSharedSecret(uint8_t* dest_secret, int peer_idx) override;
+
+    // Return zero retransmit jitter so flood propagation is fast and
+    // deterministic in simulation (no random multi-second delays).
+    uint32_t getRetransmitDelay(const mesh::Packet* packet) override { return 0; }
 
     void  onPeerDataRecv(mesh::Packet* packet, uint8_t type,
                          int sender_idx, const uint8_t* secret,

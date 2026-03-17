@@ -1,0 +1,1854 @@
+{
+  "_comment": "10\u00d710 grid topology. SOURCE=n_0_0 (endpoint) \u2192 DEST=n_9_9 (endpoint). All 98 interior nodes are relays.",
+  "nodes": [
+    {
+      "name": "n_0_0",
+      "relay": false
+    },
+    {
+      "name": "n_0_1",
+      "relay": true
+    },
+    {
+      "name": "n_0_2",
+      "relay": true
+    },
+    {
+      "name": "n_0_3",
+      "relay": true
+    },
+    {
+      "name": "n_0_4",
+      "relay": true
+    },
+    {
+      "name": "n_0_5",
+      "relay": true
+    },
+    {
+      "name": "n_0_6",
+      "relay": true
+    },
+    {
+      "name": "n_0_7",
+      "relay": true
+    },
+    {
+      "name": "n_0_8",
+      "relay": true
+    },
+    {
+      "name": "n_0_9",
+      "relay": true
+    },
+    {
+      "name": "n_1_0",
+      "relay": true
+    },
+    {
+      "name": "n_1_1",
+      "relay": true
+    },
+    {
+      "name": "n_1_2",
+      "relay": true
+    },
+    {
+      "name": "n_1_3",
+      "relay": true
+    },
+    {
+      "name": "n_1_4",
+      "relay": true
+    },
+    {
+      "name": "n_1_5",
+      "relay": true
+    },
+    {
+      "name": "n_1_6",
+      "relay": true
+    },
+    {
+      "name": "n_1_7",
+      "relay": true
+    },
+    {
+      "name": "n_1_8",
+      "relay": true
+    },
+    {
+      "name": "n_1_9",
+      "relay": true
+    },
+    {
+      "name": "n_2_0",
+      "relay": true
+    },
+    {
+      "name": "n_2_1",
+      "relay": true
+    },
+    {
+      "name": "n_2_2",
+      "relay": true
+    },
+    {
+      "name": "n_2_3",
+      "relay": true
+    },
+    {
+      "name": "n_2_4",
+      "relay": true
+    },
+    {
+      "name": "n_2_5",
+      "relay": true
+    },
+    {
+      "name": "n_2_6",
+      "relay": true
+    },
+    {
+      "name": "n_2_7",
+      "relay": true
+    },
+    {
+      "name": "n_2_8",
+      "relay": true
+    },
+    {
+      "name": "n_2_9",
+      "relay": true
+    },
+    {
+      "name": "n_3_0",
+      "relay": true
+    },
+    {
+      "name": "n_3_1",
+      "relay": true
+    },
+    {
+      "name": "n_3_2",
+      "relay": true
+    },
+    {
+      "name": "n_3_3",
+      "relay": true
+    },
+    {
+      "name": "n_3_4",
+      "relay": true
+    },
+    {
+      "name": "n_3_5",
+      "relay": true
+    },
+    {
+      "name": "n_3_6",
+      "relay": true
+    },
+    {
+      "name": "n_3_7",
+      "relay": true
+    },
+    {
+      "name": "n_3_8",
+      "relay": true
+    },
+    {
+      "name": "n_3_9",
+      "relay": true
+    },
+    {
+      "name": "n_4_0",
+      "relay": true
+    },
+    {
+      "name": "n_4_1",
+      "relay": true
+    },
+    {
+      "name": "n_4_2",
+      "relay": true
+    },
+    {
+      "name": "n_4_3",
+      "relay": true
+    },
+    {
+      "name": "n_4_4",
+      "relay": true
+    },
+    {
+      "name": "n_4_5",
+      "relay": true
+    },
+    {
+      "name": "n_4_6",
+      "relay": true
+    },
+    {
+      "name": "n_4_7",
+      "relay": true
+    },
+    {
+      "name": "n_4_8",
+      "relay": true
+    },
+    {
+      "name": "n_4_9",
+      "relay": true
+    },
+    {
+      "name": "n_5_0",
+      "relay": true
+    },
+    {
+      "name": "n_5_1",
+      "relay": true
+    },
+    {
+      "name": "n_5_2",
+      "relay": true
+    },
+    {
+      "name": "n_5_3",
+      "relay": true
+    },
+    {
+      "name": "n_5_4",
+      "relay": true
+    },
+    {
+      "name": "n_5_5",
+      "relay": true
+    },
+    {
+      "name": "n_5_6",
+      "relay": true
+    },
+    {
+      "name": "n_5_7",
+      "relay": true
+    },
+    {
+      "name": "n_5_8",
+      "relay": true
+    },
+    {
+      "name": "n_5_9",
+      "relay": true
+    },
+    {
+      "name": "n_6_0",
+      "relay": true
+    },
+    {
+      "name": "n_6_1",
+      "relay": true
+    },
+    {
+      "name": "n_6_2",
+      "relay": true
+    },
+    {
+      "name": "n_6_3",
+      "relay": true
+    },
+    {
+      "name": "n_6_4",
+      "relay": true
+    },
+    {
+      "name": "n_6_5",
+      "relay": true
+    },
+    {
+      "name": "n_6_6",
+      "relay": true
+    },
+    {
+      "name": "n_6_7",
+      "relay": true
+    },
+    {
+      "name": "n_6_8",
+      "relay": true
+    },
+    {
+      "name": "n_6_9",
+      "relay": true
+    },
+    {
+      "name": "n_7_0",
+      "relay": true
+    },
+    {
+      "name": "n_7_1",
+      "relay": true
+    },
+    {
+      "name": "n_7_2",
+      "relay": true
+    },
+    {
+      "name": "n_7_3",
+      "relay": true
+    },
+    {
+      "name": "n_7_4",
+      "relay": true
+    },
+    {
+      "name": "n_7_5",
+      "relay": true
+    },
+    {
+      "name": "n_7_6",
+      "relay": true
+    },
+    {
+      "name": "n_7_7",
+      "relay": true
+    },
+    {
+      "name": "n_7_8",
+      "relay": true
+    },
+    {
+      "name": "n_7_9",
+      "relay": true
+    },
+    {
+      "name": "n_8_0",
+      "relay": true
+    },
+    {
+      "name": "n_8_1",
+      "relay": true
+    },
+    {
+      "name": "n_8_2",
+      "relay": true
+    },
+    {
+      "name": "n_8_3",
+      "relay": true
+    },
+    {
+      "name": "n_8_4",
+      "relay": true
+    },
+    {
+      "name": "n_8_5",
+      "relay": true
+    },
+    {
+      "name": "n_8_6",
+      "relay": true
+    },
+    {
+      "name": "n_8_7",
+      "relay": true
+    },
+    {
+      "name": "n_8_8",
+      "relay": true
+    },
+    {
+      "name": "n_8_9",
+      "relay": true
+    },
+    {
+      "name": "n_9_0",
+      "relay": true
+    },
+    {
+      "name": "n_9_1",
+      "relay": true
+    },
+    {
+      "name": "n_9_2",
+      "relay": true
+    },
+    {
+      "name": "n_9_3",
+      "relay": true
+    },
+    {
+      "name": "n_9_4",
+      "relay": true
+    },
+    {
+      "name": "n_9_5",
+      "relay": true
+    },
+    {
+      "name": "n_9_6",
+      "relay": true
+    },
+    {
+      "name": "n_9_7",
+      "relay": true
+    },
+    {
+      "name": "n_9_8",
+      "relay": true
+    },
+    {
+      "name": "n_9_9",
+      "relay": false
+    }
+  ],
+  "edges": [
+    {
+      "a": "n_0_0",
+      "b": "n_0_1",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_0_0",
+      "b": "n_1_0",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_0_1",
+      "b": "n_0_2",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_0_1",
+      "b": "n_1_1",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_0_2",
+      "b": "n_0_3",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_0_2",
+      "b": "n_1_2",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_0_3",
+      "b": "n_0_4",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_0_3",
+      "b": "n_1_3",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_0_4",
+      "b": "n_0_5",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_0_4",
+      "b": "n_1_4",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_0_5",
+      "b": "n_0_6",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_0_5",
+      "b": "n_1_5",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_0_6",
+      "b": "n_0_7",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_0_6",
+      "b": "n_1_6",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_0_7",
+      "b": "n_0_8",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_0_7",
+      "b": "n_1_7",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_0_8",
+      "b": "n_0_9",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_0_8",
+      "b": "n_1_8",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_0_9",
+      "b": "n_1_9",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_1_0",
+      "b": "n_1_1",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_1_0",
+      "b": "n_2_0",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_1_1",
+      "b": "n_1_2",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_1_1",
+      "b": "n_2_1",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_1_2",
+      "b": "n_1_3",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_1_2",
+      "b": "n_2_2",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_1_3",
+      "b": "n_1_4",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_1_3",
+      "b": "n_2_3",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_1_4",
+      "b": "n_1_5",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_1_4",
+      "b": "n_2_4",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_1_5",
+      "b": "n_1_6",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_1_5",
+      "b": "n_2_5",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_1_6",
+      "b": "n_1_7",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_1_6",
+      "b": "n_2_6",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_1_7",
+      "b": "n_1_8",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_1_7",
+      "b": "n_2_7",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_1_8",
+      "b": "n_1_9",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_1_8",
+      "b": "n_2_8",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_1_9",
+      "b": "n_2_9",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_2_0",
+      "b": "n_2_1",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_2_0",
+      "b": "n_3_0",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_2_1",
+      "b": "n_2_2",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_2_1",
+      "b": "n_3_1",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_2_2",
+      "b": "n_2_3",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_2_2",
+      "b": "n_3_2",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_2_3",
+      "b": "n_2_4",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_2_3",
+      "b": "n_3_3",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_2_4",
+      "b": "n_2_5",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_2_4",
+      "b": "n_3_4",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_2_5",
+      "b": "n_2_6",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_2_5",
+      "b": "n_3_5",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_2_6",
+      "b": "n_2_7",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_2_6",
+      "b": "n_3_6",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_2_7",
+      "b": "n_2_8",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_2_7",
+      "b": "n_3_7",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_2_8",
+      "b": "n_2_9",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_2_8",
+      "b": "n_3_8",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_2_9",
+      "b": "n_3_9",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_3_0",
+      "b": "n_3_1",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_3_0",
+      "b": "n_4_0",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_3_1",
+      "b": "n_3_2",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_3_1",
+      "b": "n_4_1",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_3_2",
+      "b": "n_3_3",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_3_2",
+      "b": "n_4_2",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_3_3",
+      "b": "n_3_4",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_3_3",
+      "b": "n_4_3",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_3_4",
+      "b": "n_3_5",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_3_4",
+      "b": "n_4_4",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_3_5",
+      "b": "n_3_6",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_3_5",
+      "b": "n_4_5",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_3_6",
+      "b": "n_3_7",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_3_6",
+      "b": "n_4_6",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_3_7",
+      "b": "n_3_8",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_3_7",
+      "b": "n_4_7",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_3_8",
+      "b": "n_3_9",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_3_8",
+      "b": "n_4_8",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_3_9",
+      "b": "n_4_9",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_4_0",
+      "b": "n_4_1",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_4_0",
+      "b": "n_5_0",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_4_1",
+      "b": "n_4_2",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_4_1",
+      "b": "n_5_1",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_4_2",
+      "b": "n_4_3",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_4_2",
+      "b": "n_5_2",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_4_3",
+      "b": "n_4_4",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_4_3",
+      "b": "n_5_3",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_4_4",
+      "b": "n_4_5",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_4_4",
+      "b": "n_5_4",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_4_5",
+      "b": "n_4_6",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_4_5",
+      "b": "n_5_5",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_4_6",
+      "b": "n_4_7",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_4_6",
+      "b": "n_5_6",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_4_7",
+      "b": "n_4_8",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_4_7",
+      "b": "n_5_7",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_4_8",
+      "b": "n_4_9",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_4_8",
+      "b": "n_5_8",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_4_9",
+      "b": "n_5_9",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_5_0",
+      "b": "n_5_1",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_5_0",
+      "b": "n_6_0",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_5_1",
+      "b": "n_5_2",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_5_1",
+      "b": "n_6_1",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_5_2",
+      "b": "n_5_3",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_5_2",
+      "b": "n_6_2",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_5_3",
+      "b": "n_5_4",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_5_3",
+      "b": "n_6_3",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_5_4",
+      "b": "n_5_5",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_5_4",
+      "b": "n_6_4",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_5_5",
+      "b": "n_5_6",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_5_5",
+      "b": "n_6_5",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_5_6",
+      "b": "n_5_7",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_5_6",
+      "b": "n_6_6",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_5_7",
+      "b": "n_5_8",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_5_7",
+      "b": "n_6_7",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_5_8",
+      "b": "n_5_9",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_5_8",
+      "b": "n_6_8",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_5_9",
+      "b": "n_6_9",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_6_0",
+      "b": "n_6_1",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_6_0",
+      "b": "n_7_0",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_6_1",
+      "b": "n_6_2",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_6_1",
+      "b": "n_7_1",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_6_2",
+      "b": "n_6_3",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_6_2",
+      "b": "n_7_2",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_6_3",
+      "b": "n_6_4",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_6_3",
+      "b": "n_7_3",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_6_4",
+      "b": "n_6_5",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_6_4",
+      "b": "n_7_4",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_6_5",
+      "b": "n_6_6",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_6_5",
+      "b": "n_7_5",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_6_6",
+      "b": "n_6_7",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_6_6",
+      "b": "n_7_6",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_6_7",
+      "b": "n_6_8",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_6_7",
+      "b": "n_7_7",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_6_8",
+      "b": "n_6_9",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_6_8",
+      "b": "n_7_8",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_6_9",
+      "b": "n_7_9",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_7_0",
+      "b": "n_7_1",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_7_0",
+      "b": "n_8_0",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_7_1",
+      "b": "n_7_2",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_7_1",
+      "b": "n_8_1",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_7_2",
+      "b": "n_7_3",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_7_2",
+      "b": "n_8_2",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_7_3",
+      "b": "n_7_4",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_7_3",
+      "b": "n_8_3",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_7_4",
+      "b": "n_7_5",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_7_4",
+      "b": "n_8_4",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_7_5",
+      "b": "n_7_6",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_7_5",
+      "b": "n_8_5",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_7_6",
+      "b": "n_7_7",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_7_6",
+      "b": "n_8_6",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_7_7",
+      "b": "n_7_8",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_7_7",
+      "b": "n_8_7",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_7_8",
+      "b": "n_7_9",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_7_8",
+      "b": "n_8_8",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_7_9",
+      "b": "n_8_9",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_8_0",
+      "b": "n_8_1",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_8_0",
+      "b": "n_9_0",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_8_1",
+      "b": "n_8_2",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_8_1",
+      "b": "n_9_1",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_8_2",
+      "b": "n_8_3",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_8_2",
+      "b": "n_9_2",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_8_3",
+      "b": "n_8_4",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_8_3",
+      "b": "n_9_3",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_8_4",
+      "b": "n_8_5",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_8_4",
+      "b": "n_9_4",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_8_5",
+      "b": "n_8_6",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_8_5",
+      "b": "n_9_5",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_8_6",
+      "b": "n_8_7",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_8_6",
+      "b": "n_9_6",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_8_7",
+      "b": "n_8_8",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_8_7",
+      "b": "n_9_7",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_8_8",
+      "b": "n_8_9",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_8_8",
+      "b": "n_9_8",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_8_9",
+      "b": "n_9_9",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_9_0",
+      "b": "n_9_1",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_9_1",
+      "b": "n_9_2",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_9_2",
+      "b": "n_9_3",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_9_3",
+      "b": "n_9_4",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_9_4",
+      "b": "n_9_5",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_9_5",
+      "b": "n_9_6",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_9_6",
+      "b": "n_9_7",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_9_7",
+      "b": "n_9_8",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    },
+    {
+      "a": "n_9_8",
+      "b": "n_9_9",
+      "loss": 0.02,
+      "latency_ms": 20.0,
+      "snr": 8.0,
+      "rssi": -85.0
+    }
+  ],
+  "simulation": {
+    "warmup_secs": 10.0,
+    "duration_secs": 120.0,
+    "traffic_interval_secs": 10.0,
+    "advert_interval_secs": 30.0,
+    "agent_binary": "./node_agent/build/node_agent"
+  }
+}

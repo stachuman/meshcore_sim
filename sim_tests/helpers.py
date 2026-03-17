@@ -98,6 +98,56 @@ def two_node_direct_config(**sim_overrides) -> TopologyConfig:
     )
 
 
+def grid_topo_config(rows: int, cols: int, **sim_overrides) -> TopologyConfig:
+    """
+    rows×cols orthogonal grid topology.
+
+    * n_0_0               → SOURCE endpoint
+    * n_{rows-1}_{cols-1} → DESTINATION endpoint
+    * all others          → relays
+
+    Edges: 4-connectivity (N/S/E/W).  Default: 2 % loss, 20 ms latency.
+    """
+    def _name(r: int, c: int) -> str:
+        return f"n_{r}_{c}"
+
+    src = _name(0, 0)
+    dst = _name(rows - 1, cols - 1)
+
+    nodes = []
+    for r in range(rows):
+        for c in range(cols):
+            name = _name(r, c)
+            nodes.append(NodeConfig(name=name, relay=(name not in (src, dst))))
+
+    edges = []
+    for r in range(rows):
+        for c in range(cols):
+            if c + 1 < cols:
+                edges.append(EdgeConfig(
+                    a=_name(r, c), b=_name(r, c + 1),
+                    loss=0.02, latency_ms=20.0, snr=8.0, rssi=-85.0,
+                ))
+            if r + 1 < rows:
+                edges.append(EdgeConfig(
+                    a=_name(r, c), b=_name(r + 1, c),
+                    loss=0.02, latency_ms=20.0, snr=8.0, rssi=-85.0,
+                ))
+
+    sim = SimulationConfig(
+        warmup_secs=5.0,
+        duration_secs=60.0,
+        traffic_interval_secs=8.0,
+        advert_interval_secs=30.0,
+        agent_binary=BINARY_PATH,
+        seed=42,
+    )
+    for k, v in sim_overrides.items():
+        setattr(sim, k, v)
+
+    return TopologyConfig(nodes=nodes, edges=edges, simulation=sim)
+
+
 def adversarial_config(mode: str, probability: float = 1.0, **adv_extras) -> TopologyConfig:
     """
     sender (endpoint) -- evil_relay (relay, adversarial) -- receiver (endpoint)

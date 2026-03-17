@@ -71,12 +71,12 @@ void SimNode::getPeerSharedSecret(uint8_t* dest_secret, int peer_idx) {
 // ---------------------------------------------------------------------------
 // Event callbacks
 // ---------------------------------------------------------------------------
-void SimNode::onPeerDataRecv(mesh::Packet* /*packet*/, uint8_t type,
+void SimNode::onPeerDataRecv(mesh::Packet* packet, uint8_t type,
                               int sender_idx, const uint8_t* /*secret*/,
                               uint8_t* data, size_t len) {
     if (sender_idx < 0 || sender_idx >= (int)_search_results.size()) return;
     int idx = _search_results[sender_idx];
-    const Contact& c = _contacts[idx];
+    Contact& c = _contacts[idx];
 
     char pub_hex[PUB_KEY_SIZE * 2 + 1];
     bytes_to_hex(pub_hex, c.id.pub_key, PUB_KEY_SIZE);
@@ -109,6 +109,46 @@ void SimNode::onPeerDataRecv(mesh::Packet* /*packet*/, uint8_t type,
                  "{\"type\":\"recv_data\",\"from\":\"%s\",\"payload_type\":%d,\"hex\":\"%s\"}",
                  pub_hex, (int)type, hex);
         emitJson(json);
+    }
+
+    // -----------------------------------------------------------------------
+    // Path exchange: when we receive a flood TXT_MSG from a peer we don't yet
+    // have a direct route to, (1) store the *reversed* relay-hash sequence as
+    // our direct path back to that sender, and (2) flood a PATH reply so the
+    // sender learns the forward path to reach us directly next time.
+    // -----------------------------------------------------------------------
+    if (type == PAYLOAD_TYPE_TXT_MSG
+        && packet->isRouteFlood()
+        && !c.has_path
+        && packet->getPathHashCount() > 0) {
+
+        uint8_t sz  = packet->getPathHashSize();
+        uint8_t cnt = packet->getPathHashCount();
+
+        // Reverse the relay-hash sequence: forward path in the arriving packet
+        // is [r1, r2, ..., rN] (origin → us).  To route back we need the
+        // reversed order [rN, ..., r2, r1].
+        c.path.resize((size_t)cnt * sz);
+        for (uint8_t i = 0; i < cnt; i++) {
+            memcpy(c.path.data() + (size_t)(cnt - 1 - i) * sz,
+                   packet->path + (size_t)i * sz, sz);
+        }
+        c.has_path = true;
+
+        // Flood a PATH packet back so the sender learns the direct path to us.
+        // createPathReturn encodes packet->path (the forward hashes) into a
+        // PATH payload encrypted to the sender — when the sender's
+        // onPeerPathRecv fires it stores those same hashes as its direct route.
+        mesh::Packet* rpath = createPathReturn(
+            c.id, c.shared_secret,
+            packet->path, packet->path_len,
+            0, nullptr, 0);
+        if (rpath) sendFlood(rpath);
+
+        char pub_hex2[PUB_KEY_SIZE * 2 + 1];
+        bytes_to_hex(pub_hex2, c.id.pub_key, PUB_KEY_SIZE);
+        emitLog("path-exchange: stored %d-hop reverse path to %.16s; sent PATH return",
+                (int)cnt, pub_hex2);
     }
 }
 
