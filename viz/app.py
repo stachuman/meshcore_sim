@@ -342,7 +342,7 @@ def _packet_info_children(pkt: dict, idx: int, total: int) -> list:
     ]
 
 
-# ── Hop info helper (Phase 2) ────────────────────────────────────────────────
+# ── Hop / broadcast-step helpers (Phase 2) ───────────────────────────────────
 
 _ROUTE_TYPE: dict[int, str] = {0: "FLOOD", 1: "DIRECT", 3: "TRANSPORT_FLOOD"}
 
@@ -351,30 +351,59 @@ def _route_name(rt: int) -> str:
     return _ROUTE_TYPE.get(rt, f"route{rt}")
 
 
-def _hop_info_children(pkt: dict, hop_idx: int) -> list:
-    """Sidebar content for the selected hop (or summary when hop_idx == -1)."""
-    hops = pkt.get("hops", [])
-    n = len(hops)
-    if hop_idx < 0 or hop_idx >= n:
+def _broadcast_steps(pkt: dict) -> list[list[dict]]:
+    """
+    Group a packet's hops into broadcast steps ordered by tx_id.
+
+    All hops that share a tx_id came from the same on-air transmission and
+    are returned as one group.  Hops without a tx_id (old traces) each form
+    their own singleton group so the slider still works.
+    """
+    seen: dict = {}
+    for h in pkt.get("hops", []):
+        key = h.get("tx_id")
+        if key is None:
+            key = id(h)   # fallback: treat as unique broadcast
+        if key not in seen:
+            seen[key] = []
+        seen[key].append(h)
+    return list(seen.values())
+
+
+def _step_info_children(
+    pkt: dict, step_idx: int, steps: list[list[dict]]
+) -> list:
+    """Sidebar content for the selected broadcast step (or summary when -1)."""
+    n_steps = len(steps)
+    if step_idx < 0 or step_idx >= n_steps:
         return [
             html.Div(
-                f"All {n} hop(s) shown",
+                f"All {n_steps} broadcast step(s) shown",
                 style={"color": "#6c757d", "fontSize": "11px"},
             )
         ]
-    h = hops[hop_idx]
-    dt = h["t"] - pkt["first_seen_at"]
+    step = steps[step_idx]
+    sender    = step[0]["sender"]
+    receivers = [h["receiver"] for h in step]
+    dt        = step[0]["t"] - pkt["first_seen_at"]
+    route     = _route_name(step[0]["route_type"])
+    rx_short  = ", ".join(_short(r) for r in receivers)
     return [
         html.Div(
-            f"Hop {hop_idx + 1} / {n}",
+            f"Broadcast {step_idx + 1} / {n_steps}",
             style={"fontWeight": "600", "marginBottom": "2px"},
         ),
         html.Div(
-            f"{_short(h['sender'])} → {_short(h['receiver'])}",
-            title=f"{h['sender']} → {h['receiver']}",
+            f"{_short(sender)} → {len(receivers)} node(s)",
+            title=f"{sender} → {', '.join(receivers)}",
         ),
-        html.Div(f"Route: {_route_name(h['route_type'])}"),
-        html.Div(f"t+{dt:.3f}s  paths: {h['path_count']}"),
+        html.Div(
+            rx_short,
+            style={"fontSize": "11px", "color": "#6c757d"},
+            title=", ".join(receivers),
+        ),
+        html.Div(f"Route: {route}"),
+        html.Div(f"t+{dt:.3f}s  paths: {step[0]['path_count']}"),
     ]
 
 
@@ -388,6 +417,7 @@ def _sidebar(
     trace: Optional[dict] = None,
     w_counts: Optional[dict[str, int]] = None,
     trace_warning: Optional[str] = None,
+    all_steps: Optional[list] = None,
 ) -> html.Div:
     role_counts: dict[str, int] = {}
     for n in nodes:
@@ -525,7 +555,7 @@ def _sidebar(
                 tooltip={"placement": "bottom", "always_visible": False},
             )
             initial_hop_max = max(
-                (len(p.get("hops", [])) - 1 for p in packets), default=0
+                (len(s) - 1 for s in (all_steps or [])), default=0
             )
             hop_slider: Any = dcc.Slider(
                 id="hop-slider",
@@ -603,7 +633,7 @@ def _sidebar(
             ),
             html.Hr(style={"margin": "10px 0", "borderColor": "#dee2e6"}),
             html.Div(
-                "Step through hops:",
+                "Step through broadcast events:",
                 style={"fontSize": "12px", "color": "#6c757d", "marginBottom": "4px"},
             ),
             hop_slider,
@@ -674,6 +704,7 @@ def create_app(
 
     w_counts: Optional[dict[str, int]] = _witness_counts(trace) if trace else None
     max_w = max(w_counts.values(), default=0) if w_counts else 0
+    all_steps: list[list[list[dict]]] = [_broadcast_steps(p) for p in packets]
 
     # Cross-check trace metadata against the loaded topology
     trace_warning: Optional[str] = None
@@ -698,6 +729,7 @@ def create_app(
     sidebar = _sidebar(
         topology_path, nodes, edges, geo,
         trace=trace, w_counts=w_counts, trace_warning=trace_warning,
+        all_steps=all_steps,
     )
 
     if geo:
@@ -746,13 +778,13 @@ def create_app(
             )
             def _on_packet_geo(idx: int, hop_idx: int) -> tuple:
                 idx = idx or 0
-                hop_idx = hop_idx if hop_idx is not None else -1
-                pkt = packets[idx]
-                hops = pkt.get("hops", [])
-                if 0 <= hop_idx < len(hops):
-                    h = hops[hop_idx]
-                    senders   = [h["sender"]]
-                    receivers = [h["receiver"]]
+                step_idx = hop_idx if hop_idx is not None else -1
+                pkt   = packets[idx]
+                steps = all_steps[idx]
+                if 0 <= step_idx < len(steps):
+                    step      = steps[step_idx]
+                    senders   = [step[0]["sender"]]
+                    receivers = [h["receiver"] for h in step]
                 else:
                     senders   = pkt["unique_senders"]
                     receivers = pkt["unique_receivers"]
@@ -764,7 +796,7 @@ def create_app(
                 return (
                     fig,
                     _packet_info_children(pkt, idx, len(packets)),
-                    _hop_info_children(pkt, hop_idx),
+                    _step_info_children(pkt, step_idx, steps),
                 )
 
         else:
@@ -777,13 +809,13 @@ def create_app(
             )
             def _on_packet_cyto(idx: int, hop_idx: int) -> tuple:
                 idx = idx or 0
-                hop_idx = hop_idx if hop_idx is not None else -1
-                pkt = packets[idx]
-                hops = pkt.get("hops", [])
-                if 0 <= hop_idx < len(hops):
-                    h = hops[hop_idx]
-                    senders   = [h["sender"]]
-                    receivers = [h["receiver"]]
+                step_idx = hop_idx if hop_idx is not None else -1
+                pkt   = packets[idx]
+                steps = all_steps[idx]
+                if 0 <= step_idx < len(steps):
+                    step      = steps[step_idx]
+                    senders   = [step[0]["sender"]]
+                    receivers = [h["receiver"] for h in step]
                 else:
                     senders   = pkt["unique_senders"]
                     receivers = pkt["unique_receivers"]
@@ -801,7 +833,7 @@ def create_app(
                 return (
                     stylesheet,
                     _packet_info_children(pkt, idx, len(packets)),
-                    _hop_info_children(pkt, hop_idx),
+                    _step_info_children(pkt, step_idx, steps),
                 )
 
         # Advance on each interval tick.
@@ -848,10 +880,10 @@ def create_app(
             State("hop-play-mode", "value"),
         )
         def _reset_hop(pkt_idx: int, hop_mode: list) -> tuple:
-            pkt_idx = pkt_idx or 0
-            n_hops = len(packets[pkt_idx].get("hops", []))
+            pkt_idx  = pkt_idx or 0
+            n_steps  = len(all_steps[pkt_idx])
             reset_val = 0 if hop_mode else -1
-            return max(n_hops - 1, 0), reset_val
+            return max(n_steps - 1, 0), reset_val
 
         # Play/pause button toggles interval
         @app.callback(

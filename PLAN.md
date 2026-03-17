@@ -73,6 +73,7 @@ Success criteria:
 | `viz/` — Trace validation: mismatch warning when trace topology/nodes don't match loaded topology | ✅ complete |
 | `tracer.to_dict()` — embeds `topology` (filename) and `nodes` list for cross-checking in viz | ✅ complete |
 | `HopRecord.tx_id` — monotonic counter groups all deliveries from the same broadcast; `to_dict()` emits it | ✅ complete |
+| `viz/` — Phase 4 broadcast-aware hop display: hop slider steps through broadcast events (one sender → N receivers per step) | ✅ complete |
 
 ### Key invariants
 
@@ -291,7 +292,24 @@ Side-by-side view of two trace files (baseline vs. modified routing).
 - Useful for quickly checking whether a candidate routing modification
   improves privacy without regressing delivery.
 
-#### Phase 4 — Broadcast-aware hop display  [FUTURE]
+#### Phase 4 — Broadcast-aware hop display  [✅ DONE]
+
+#### Phase 5 — Destination annotation  [POSSIBLE FUTURE]
+
+The viz currently shows the originating sender of each packet but not the
+intended final destination.  The destination is encrypted inside the payload
+and cannot be recovered from the wire bytes alone.
+
+To add it, the orchestrator would intercept at send time: just before
+`NodeAgent.send_text(dest_prefix, text)` is called, queue a
+`(sender_name → dest_pub)` pending entry; when the resulting `tx` event
+fires in `_on_tx`, consume the entry and pass `dest_node` to
+`tracer.record_tx`.  `PacketTrace` and `to_dict()` would then gain a
+`dest_node` field that the viz can display alongside `first_sender`.
+
+Caveat: this only covers packets originating from the `TrafficGenerator`.
+Packets from other sources (e.g. room server forwards, demo scripts) would
+need their own hookup points.
 
 Currently the trace stores one `HopRecord` per `(sender, receiver)` pair.
 A single LoRa broadcast from node A to neighbours B, C, D produces three
@@ -302,10 +320,10 @@ Work items:
 - ~~Add a `tx_id` counter to `PacketTracer`; increment it in `record_tx` and
   store it on every `HopRecord` created by the corresponding `record_rx` calls.~~  ✅ done
 - ~~Update `to_dict()` to include `tx_id` on each hop object.~~  ✅ done
-- In the viz hop slider, group hops by `tx_id`; each "step" advances one
+- ~~In the viz hop slider, group hops by `tx_id`; each "step" advances one
   `tx_id` group rather than one individual `(sender→receiver)` pair.
-  Highlight the sender in orange and **all receivers in that group** in green
-  simultaneously, giving an accurate picture of the broadcast event.
+  Highlight the sender in orange and all receivers in that group in green
+  simultaneously, giving an accurate picture of the broadcast event.~~  ✅ done
 
 ### 6. RF physical layer fidelity  [FUTURE — low priority]
 
@@ -388,6 +406,7 @@ by `unique_receivers` to see which adversarial nodes saw which packets.
 | Date | Change |
 |------|--------|
 | 2026-03-16 | `tools/README.md` — full auth guide and CLI reference for scraper; FD-limit fix for large topologies |
+| 2026-03-17 | `viz/` — Phase 4: hop slider now steps through broadcast events (one sender → N receivers); uses `tx_id` grouping |
 | 2026-03-17 | `tracer` — `HopRecord.tx_id`: monotonic counter groups all deliveries from the same broadcast event; emitted in trace JSON |
 | 2026-03-17 | `viz/` — hop-by-hop step-through slider; Play/Pause drives hop animation; "animate hops" checkbox; trace mismatch validation; trace JSON now embeds topology name + node list |
 | 2026-03-17 | `viz/` Phase 2 — witness-count heatmap, packet step-through slider, sender/receiver highlight; Play/Pause with speed control; `--trace-out` flag on orchestrator |

@@ -393,12 +393,15 @@ Phase 2 features:
   nodes are senders, green nodes are receivers for that packet.
 - **Play / Pause** with speed control (0.5× – 5×) to auto-animate through
   packets in time order.
-- **Hop-by-hop view** — a second slider zooms in on a single packet and
-  steps through each individual (sender → receiver) link.  Watch a flood
-  or direct delivery propagate node-by-node.
-- **Animate hops** checkbox — when enabled, Play/Pause drives the hop slider
-  instead of the packet slider, letting you watch an entire trace unfold
-  at the hop level without touching the sliders manually.
+- **Broadcast-step view** — a second slider zooms in on a single packet and
+  steps through each **broadcast event**: one sender highlighted in orange,
+  all nodes that received that transmission highlighted in green simultaneously.
+  A flood from node A to neighbours B, C, D appears as one step (not three),
+  accurately reflecting the shared on-air transmission.  Steps are grouped
+  by `tx_id` so the grouping is exact, not timestamp-heuristic.
+- **Animate broadcast steps** checkbox — when enabled, Play/Pause drives the
+  broadcast-step slider instead of the packet slider, letting you watch an
+  entire trace unfold step-by-step without touching the sliders manually.
 - **Trace validation** — if the trace was recorded with a different topology,
   a red warning banner appears in the sidebar.  The trace JSON now embeds
   the topology filename and node list for this cross-check.
