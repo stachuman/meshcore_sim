@@ -63,6 +63,8 @@ Success criteria:
 | `tools/fetch_topology.py` — scrape live meshcore-mqtt-live-map → topology JSON | ✅ complete |
 | `tools/README.md` — full auth guide, CLI reference, caveats for the scraper | ✅ complete |
 | Large-topology FD fix — `_raise_fd_limit()` + batched subprocess spawning in orchestrator | ✅ complete |
+| Geo coordinates (`lat`/`lon`) on topology nodes — carried through from scraper for visualisation | ✅ complete |
+| `viz/` — Phase 1 static topology viewer (geo map + force-directed, node labels, hover info) | ✅ complete |
 
 ### Key invariants
 
@@ -234,7 +236,54 @@ Start with **path hiding** (lowest complexity, directly addresses the
 path_count=0 source-identification attack) to establish the modify → test →
 measure workflow, then move to per-hop re-encryption to break correlation.
 
-### 5. Adversarial test framework
+### 5. Topology & trace visualisation tool  (`viz/`)  [Phase 1 ✅ DONE]
+
+A standalone visualisation tool, entirely self-contained in a `viz/` subdirectory.
+It imports nothing from the orchestrator and does not affect the simulator in any way.
+It reads topology JSON files and optional trace files produced by the simulator.
+
+**Isolation contract:**
+- Lives exclusively under `viz/` — no imports from `orchestrator/` or `sim_tests/`.
+- Has its own `requirements.txt`; core simulator has zero new dependencies.
+- The existing test suite (`python3 -m sim_tests`) does not import or exercise `viz/`.
+
+**Toolchain:** Dash + Plotly + dash-cytoscape (all pure-Python, pip-installable).
+
+#### Phase 1 — Static topology viewer
+
+- Load any topology JSON and render it interactively in a browser tab.
+- **Geo-aware layout** (when `lat`/`lon` are present on nodes): plot on a
+  Plotly scattermapbox using OpenStreetMap tiles.  Nodes coloured by role
+  (relay = blue, room-server = gold, endpoint = grey); edges drawn as lines
+  with thickness ∝ link count (for live-map topologies).
+- **Force-directed layout** (synthetic / no-coordinate topologies): use
+  dash-cytoscape's built-in `cose` layout.  Hover tooltip shows node name,
+  role, edge loss, latency, SNR.
+- CLI entry point: `python3 -m viz <topology.json>` → opens browser.
+
+#### Phase 2 — Packet trace overlay
+
+Reads the `PacketTracer` JSON export (to be added to the orchestrator) alongside
+the topology file.
+
+- **Witness count heatmap**: colour each node by how many packets it witnessed.
+  High count = high privacy exposure.
+- **Flood vs direct animation**: step through packets in time order; show
+  which nodes forwarded each one, distinguishing flood broadcasts from direct
+  links.
+- **Time slider** to scrub through the simulation.
+- Summary panel: message delivery rate, mean witness count, flood vs direct
+  ratio — the exact metrics from `test_privacy_baseline.py`.
+
+#### Phase 3 — Privacy protocol comparison
+
+Side-by-side view of two trace files (baseline vs. modified routing).
+
+- Diff panel: Δ witness_count, Δ source-unlinkability score, Δ delivery rate.
+- Useful for quickly checking whether a candidate routing modification
+  improves privacy without regressing delivery.
+
+### 6. Adversarial test framework
 
 Extend the adversarial node model to support:
 - **Passive observer**: records all packets and makes them available for
@@ -267,6 +316,8 @@ by `unique_receivers` to see which adversarial nodes saw which packets.
 | Date | Change |
 |------|--------|
 | 2026-03-16 | `tools/README.md` — full auth guide and CLI reference for scraper; FD-limit fix for large topologies |
+| 2026-03-17 | `viz/` Phase 1 — static topology viewer with geo map (OpenStreetMap) and force-directed layouts; shortened node labels; hover detail panel |
+| 2026-03-16 | `viz/` subdirectory planned — static topology viewer + trace overlay (Dash + Plotly + dash-cytoscape) |
 | 2026-03-16 | `tools/fetch_topology.py` — live network scraper for meshcore-mqtt-live-map |
 | 2026-03-16 | `RoomServerNode` + interactive 10×10 demo + integration tests; 310 tests |
 | 2026-03-16 | Privacy baseline tests: flood exposure, collusion attack, direct reduction |

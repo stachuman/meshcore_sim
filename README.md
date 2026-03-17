@@ -90,6 +90,13 @@ meshcore_sim/
 │   ├── README.md           Full reference for fetch_topology.py (auth, flags, caveats)
 │   └── fetch_topology.py   Scrape a live meshcore-mqtt-live-map instance → topology JSON
 │
+├── viz/                    Topology visualiser (Dash + Plotly + dash-cytoscape)
+│   ├── __main__.py         Entry point: python3 -m viz <topology.json>
+│   ├── app.py              Dash app factory (geo map or force-directed layout)
+│   └── requirements.txt    viz-only deps (dash, plotly, dash-cytoscape)
+│
+├── requirements.txt        Optional viz dependencies (pip install -r requirements.txt)
+│
 └── topologies/             Example topology JSON files
     ├── linear_three.json
     ├── star_five.json
@@ -110,8 +117,16 @@ meshcore_sim/
 | OpenSSL | 3.x | `brew install openssl@3`; usually pre-installed on Linux |
 | Python | 3.9+ | For the orchestrator and Python tests |
 
-No external Python packages are required — the orchestrator uses only the
-standard library (`asyncio`, `json`, `subprocess`, `argparse`, `unittest`).
+No external Python packages are required to run the simulator — the
+orchestrator uses only the standard library (`asyncio`, `json`, `subprocess`,
+`argparse`, `unittest`).
+
+The optional topology visualiser (`python3 -m viz`) needs three packages.
+Install them with:
+
+```sh
+pip install -r requirements.txt
+```
 
 The MeshCore submodule must be initialised once after cloning:
 
