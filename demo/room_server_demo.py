@@ -140,6 +140,8 @@ class RoomDemo:
         self._loop: asyncio.AbstractEventLoop | None = None
         # Filled after warmup: alias → full pub-key hex
         self._room_pub: str = ""
+        # Set in run_interactive(); signalled by the REPL thread when done.
+        self._quit_event: asyncio.Event | None = None
 
     # ------------------------------------------------------------------
     # Event display
@@ -184,10 +186,6 @@ class RoomDemo:
             n.name: NodeAgent(n, topo_cfg.simulation) for n in topo_cfg.nodes
         }
 
-        # Wire event callback before starting so we don't miss early events.
-        for agent in self._agents.values():
-            agent.event_callback = self._event_cb
-
         print(_c("bold", "\n  Starting 100 node processes …"), flush=True)
         await asyncio.gather(*(a.start() for a in self._agents.values()))
         print("  Waiting for all nodes to be ready …", flush=True)
@@ -195,7 +193,17 @@ class RoomDemo:
             a.wait_ready(timeout=30.0) for a in self._agents.values()
         ))
 
+        # PacketRouter sets agent.event_callback = metrics.on_event on every agent.
+        # We chain our display callback on top so both run.
         PacketRouter(topology, self._agents, metrics, rng)
+        for agent in self._agents.values():
+            metrics_cb = agent.event_callback   # just set by PacketRouter
+            async def _chained(node_name: str, event: dict,
+                               _m=metrics_cb) -> None:
+                await _m(node_name, event)
+                await self._event_cb(node_name, event)
+            agent.event_callback = _chained
+
         traffic = TrafficGenerator(
             self._agents, topology, topo_cfg.simulation, metrics, rng
         )
@@ -281,24 +289,21 @@ class RoomDemo:
             print("  Unrecognised command.  Type /help for usage.")
             print("  > ", end="", flush=True)
 
-        # Signal the event loop to stop.
-        if self._loop:
-            self._loop.call_soon_threadsafe(self._loop.stop)
+        # Signal run_interactive() that the REPL is done.
+        if self._loop and self._quit_event:
+            self._loop.call_soon_threadsafe(self._quit_event.set)
 
     async def run_interactive(self) -> None:
-        self._loop = asyncio.get_running_loop()
+        self._loop       = asyncio.get_running_loop()
+        self._quit_event = asyncio.Event()
         await self.start()
 
         # Launch the blocking REPL in a thread.
         t = threading.Thread(target=self._repl, daemon=True)
         t.start()
 
-        # Keep the event loop alive until the REPL calls loop.stop().
-        try:
-            while t.is_alive():
-                await asyncio.sleep(0.1)
-        except asyncio.CancelledError:
-            pass
+        # Wait until the REPL signals it is done (via _quit_event.set()).
+        await self._quit_event.wait()
 
         print("\n  Shutting down …", flush=True)
         await self.stop()
