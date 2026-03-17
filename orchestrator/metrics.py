@@ -86,15 +86,19 @@ class MetricsCollector:
     # ------------------------------------------------------------------
 
     def report(self) -> str:
-        lines: list[str] = ["", "=" * 50, "  Simulation Metrics", "=" * 50, ""]
-
-        # Per-node TX / RX
+        # Per-node TX / RX — column width adapts to the longest node name
         all_nodes = sorted(set(self._tx) | set(self._rx))
+        col = max((len(n) for n in all_nodes), default=0)
+        col = max(col, len("Node"))          # never narrower than the header
+        banner_w = max(50, col + 18)         # 18 = "  " + "  " + "  ------  ------"
+
+        lines: list[str] = ["", "=" * banner_w, "  Simulation Metrics", "=" * banner_w, ""]
+
         if all_nodes:
-            lines.append(f"  {'Node':<20}  {'TX':>6}  {'RX':>6}")
-            lines.append(f"  {'-'*20}  {'-'*6}  {'-'*6}")
+            lines.append(f"  {'Node':<{col}}  {'TX':>6}  {'RX':>6}")
+            lines.append(f"  {'-'*col}  {'-'*6}  {'-'*6}")
             for n in all_nodes:
-                lines.append(f"  {n:<20}  {self._tx[n]:>6}  {self._rx[n]:>6}")
+                lines.append(f"  {n:<{col}}  {self._tx[n]:>6}  {self._rx[n]:>6}")
         lines.append("")
 
         # Delivery rate
@@ -143,5 +147,5 @@ class MetricsCollector:
                 )
             lines.append("")
 
-        lines.append("=" * 50)
+        lines.append("=" * banner_w)
         return "\n".join(lines)

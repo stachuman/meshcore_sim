@@ -7,6 +7,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import random
+import resource
 import sys
 
 from .cli import build_parser
@@ -50,7 +51,12 @@ async def run(args: object) -> int:
         agents[node_cfg.name] = NodeAgent(node_cfg, sim)
 
     log.info("Starting %d node agent(s) ...", len(agents))
-    await asyncio.gather(*(agent.start() for agent in agents.values()))
+    # Start agents in batches to avoid file-descriptor exhaustion on large
+    # topologies (each subprocess consumes ~5 FDs; macOS default limit is 256).
+    _BATCH = 50
+    all_agents = list(agents.values())
+    for _i in range(0, len(all_agents), _BATCH):
+        await asyncio.gather(*(a.start() for a in all_agents[_i:_i + _BATCH]))
 
     log.info("Waiting for all nodes to become ready ...")
     try:
@@ -128,7 +134,24 @@ async def _wall_clock_timer(secs: float) -> None:
 # Entry point
 # ---------------------------------------------------------------------------
 
+def _raise_fd_limit(needed: int = 2048) -> None:
+    """Raise the open-file-descriptor soft limit to *needed* if it is lower.
+
+    Large topologies (100+ nodes) each spawn a subprocess consuming ~5 FDs.
+    macOS defaults to 256; Linux defaults to 1024.  We silently clamp to the
+    hard limit if *needed* exceeds it and skip the raise if the OS refuses.
+    """
+    try:
+        soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+        if soft < needed:
+            target = min(needed, hard) if hard > 0 else needed
+            resource.setrlimit(resource.RLIMIT_NOFILE, (target, hard))
+    except (ValueError, OSError):
+        pass  # hard limit too low; user must run `ulimit -n` manually
+
+
 def main() -> None:
+    _raise_fd_limit()
     parser = build_parser()
     args = parser.parse_args()
 

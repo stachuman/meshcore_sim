@@ -47,6 +47,9 @@ class NodeAgent:
         self._proc: Optional[asyncio.subprocess.Process] = None
         # Lazy-initialised inside start() so construction works outside a running loop.
         self._ready_event: Optional[asyncio.Event] = None
+        # Set to True by quit() so in-flight deliver tasks don't write to a
+        # closing pipe and generate "Future exception was never retrieved" noise.
+        self._stopping: bool = False
 
         # Set by PacketRouter / MetricsCollector after construction
         self.tx_callback: Optional[TxCallback] = None
@@ -81,8 +84,16 @@ class NodeAgent:
         """Shut the subprocess down cleanly."""
         if self._proc is None or self._proc.returncode is not None:
             return
+        # Signal early so concurrent deliver_rx / send_command calls that are
+        # still in-flight bail out before touching the pipe.
+        self._stopping = True
         try:
             await self.send_command({"type": "quit"})
+            # Close stdin so the node sees EOF even if it ignores the quit
+            # command, and so the asyncio pipe transport flushes its write
+            # buffer without racing against the process closing the read end.
+            if self._proc.stdin and not self._proc.stdin.is_closing():
+                self._proc.stdin.close()
             await asyncio.wait_for(self._proc.wait(), timeout=2.0)
         except (asyncio.TimeoutError, BrokenPipeError, ConnectionResetError):
             pass
@@ -96,6 +107,11 @@ class NodeAgent:
 
     async def send_command(self, cmd: dict) -> None:
         assert self._proc and self._proc.stdin, "process not started"
+        # Bail out silently if quit() has already been called — the process is
+        # shutting down and any write attempt would race against the pipe closing,
+        # producing "Future exception was never retrieved" BrokenPipeError noise.
+        if self._stopping and cmd.get("type") != "quit":
+            return
         data = (json.dumps(cmd) + "\n").encode()
         try:
             self._proc.stdin.write(data)

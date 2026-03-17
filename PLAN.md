@@ -61,6 +61,8 @@ Success criteria:
 | Per-node `binary` field — mixed topologies with different node binaries | ✅ complete |
 | `demo/room_server_demo.py` — interactive 10×10 grid room-server demo | ✅ complete |
 | `tools/fetch_topology.py` — scrape live meshcore-mqtt-live-map → topology JSON | ✅ complete |
+| `tools/README.md` — full auth guide, CLI reference, caveats for the scraper | ✅ complete |
+| Large-topology FD fix — `_raise_fd_limit()` + batched subprocess spawning in orchestrator | ✅ complete |
 
 ### Key invariants
 
@@ -264,6 +266,7 @@ by `unique_receivers` to see which adversarial nodes saw which packets.
 
 | Date | Change |
 |------|--------|
+| 2026-03-16 | `tools/README.md` — full auth guide and CLI reference for scraper; FD-limit fix for large topologies |
 | 2026-03-16 | `tools/fetch_topology.py` — live network scraper for meshcore-mqtt-live-map |
 | 2026-03-16 | `RoomServerNode` + interactive 10×10 demo + integration tests; 310 tests |
 | 2026-03-16 | Privacy baseline tests: flood exposure, collusion attack, direct reduction |

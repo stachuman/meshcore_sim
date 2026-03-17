@@ -30,6 +30,8 @@ class NodeConfig:
     prv_key: Optional[str] = None          # 128 hex chars or None
     adversarial: Optional[AdversarialConfig] = None
     binary: Optional[str] = None           # per-node binary override (None → use SimulationConfig.default_binary)
+    lat: Optional[float] = None            # WGS-84 latitude  (ignored by simulator; for visualisation)
+    lon: Optional[float] = None            # WGS-84 longitude (ignored by simulator; for visualisation)
 
 
 @dataclass
@@ -106,6 +108,8 @@ def load_topology(path: str) -> TopologyConfig:
                 replay_delay_ms=float(a.get("replay_delay_ms", 5000.0)),
                 corrupt_byte_count=int(a.get("corrupt_byte_count", 1)),
             )
+        raw_lat = n.get("lat")
+        raw_lon = n.get("lon")
         nodes.append(NodeConfig(
             name=n["name"],
             relay=bool(n.get("relay", False)),
@@ -113,6 +117,8 @@ def load_topology(path: str) -> TopologyConfig:
             prv_key=n.get("prv_key"),
             adversarial=adv,
             binary=n.get("binary"),
+            lat=float(raw_lat) if raw_lat is not None else None,
+            lon=float(raw_lon) if raw_lon is not None else None,
         ))
 
     edges = []

@@ -87,6 +87,7 @@ meshcore_sim/
 │   └── room_server_demo.py  10×10 grid with a live room server and three clients
 │
 ├── tools/                  Utility scripts
+│   ├── README.md           Full reference for fetch_topology.py (auth, flags, caveats)
 │   └── fetch_topology.py   Scrape a live meshcore-mqtt-live-map instance → topology JSON
 │
 └── topologies/             Example topology JSON files
@@ -341,6 +342,8 @@ An array of node objects.
 | `name` | string | **required** | Unique identifier used in edges, logging, and metrics |
 | `relay` | bool | `false` | Relay nodes forward flood packets to all radio neighbours; endpoints do not |
 | `room_server` | bool | `false` | Spawn as a `RoomServerNode`: re-broadcasts every received TXT_MSG to all other contacts (mutually exclusive with `relay`) |
+| `lat` | float | — | WGS-84 latitude in decimal degrees. Ignored by the simulator; retained for visualisation tools |
+| `lon` | float | — | WGS-84 longitude in decimal degrees. Ignored by the simulator; retained for visualisation tools |
 | `binary` | string | — | Override the node binary for this node only (falls back to `simulation.default_binary`) |
 | `prv_key` | string | — | Fixed 128-hex-char (64-byte) Ed25519 private key. Omit for a fresh random identity on each run |
 | `adversarial` | object | — | Omit for an honest node; see [Adversarial nodes](#adversarial-nodes) |
@@ -550,67 +553,26 @@ Example excerpt (3×3 grid for clarity):
 
 `tools/fetch_topology.py` downloads a live network map from any
 [meshcore-mqtt-live-map](https://github.com/yellowcooln/meshcore-mqtt-live-map)
-instance and converts it to simulator topology JSON — ready to run with
-`python3 -m orchestrator`.
-
-### Check network size (no credentials needed)
+instance and converts it to simulator topology JSON.
 
 ```sh
+# Check network size — no credentials needed
 python3 tools/fetch_topology.py --stats --host live.bostonme.sh
-```
-```
-  Host:              https://live.bostonme.sh
-  Mapped devices:    215
-  Seen devices:      273
-  Active routes:     10
-  History edges:     820
-  MQTT online:       19 (16 feeding)
-  Last activity:     2026-03-17 13:50:43 UTC
-```
 
-### Fetch and convert (credentials required)
-
-The full map endpoints require authentication.  Obtain credentials one of two ways:
-
-- **Browser cookie** — visit `https://live.bostonme.sh`, pass the Cloudflare
-  Turnstile challenge, then copy the `meshmap_auth` cookie value from
-  DevTools → Application → Cookies.  Valid for 24 hours.
-- **Bearer token** — ask the network admin for a `PROD_TOKEN`.
-
-```sh
-# Relay backbone only, edges seen ≥ 5 times
+# Fetch relay backbone (edges seen ≥ 5 times)
 python3 tools/fetch_topology.py \
     --token <TOKEN> \
     --only-relays --min-edge-count 5 \
     --output topologies/boston_relays.json --verbose
 
-# All node types (relays + companions + room servers), looser edge filter
-python3 tools/fetch_topology.py \
-    --cookie <meshmap_auth value> \
-    --min-edge-count 2 \
-    --output topologies/boston_full.json --verbose
-```
-
-Then simulate against the real topology:
-
-```sh
+# Simulate the result
 python3 -m orchestrator topologies/boston_relays.json --duration 120
 ```
 
-### What the scraper does
-
-1. **Fetches `/snapshot`** — returns all devices (name, lat/lon, role, RSSI, SNR)
-   and all `history_edges` (pairs of lat/lon coordinates with a packet-count
-   for each observed link).
-2. **Resolves coordinates → node IDs** — history edges record endpoints as
-   GPS coordinates; the scraper matches each to the nearest device within 100 m.
-3. **Applies filters** — `--min-edge-count` prunes low-confidence links;
-   `--max-distance-km` (default 50 km) drops implausibly long links;
-   `--only-relays` limits the topology to repeater nodes.
-4. **Maps roles** — `device_role=1` (repeater) → `relay: true`;
-   `device_role=3` (room server) → `room_server: true`.
-5. **Sets link quality** — SNR and RSSI are averaged from the two endpoint
-   devices' last-known values; loss defaults to 5 % (tune with topology edits).
+See **[`tools/README.md`](tools/README.md)** for the full reference:
+authentication options (bearer token, browser cookie, raw Cookie header),
+step-by-step instructions for obtaining the Cloudflare session cookie, all
+CLI flags, and notes on tuning the generated topology.
 
 ---
 

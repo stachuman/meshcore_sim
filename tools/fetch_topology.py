@@ -102,7 +102,12 @@ def _fetch(
         url = f"{url}{sep}token={urllib.parse.quote(token)}"
         headers["x-access-token"] = token
     if raw_cookie:
-        headers["Cookie"] = raw_cookie          # verbatim — user pastes full header
+        # Strip an accidental "Cookie: " header-name prefix — a common mistake
+        # when copy-pasting from DevTools (the header name should not be included).
+        stripped = raw_cookie.strip()
+        if stripped.lower().startswith("cookie:"):
+            stripped = stripped[len("cookie:"):].strip()
+        headers["Cookie"] = stripped
     elif cookie:
         headers["Cookie"] = f"meshmap_auth={cookie}"
 
@@ -118,12 +123,22 @@ def _fetch(
             pass
         if e.code == 401:
             hint = (
-                "\nHint: the site may require multiple cookies (e.g. cf_clearance + meshmap_auth).\n"
-                "Try --raw-cookie with the full Cookie header from DevTools:\n"
-                "  1. Open DevTools → Network tab, reload the page\n"
-                "  2. Find any request to /snapshot or /api/nodes\n"
-                "  3. Right-click → Copy → Copy as cURL\n"
-                "  4. Extract the -H 'cookie: ...' value and pass it to --raw-cookie"
+                "\n"
+                "\nHow to fix a 401 error:"
+                "\n"
+                "\n  EASIEST — use --token with the hex token from the browser URL:"
+                "\n    1. Open https://live.bostonme.sh in your browser."
+                "\n    2. Look at the address bar.  The URL should contain ?token=<hex>."
+                "\n    3. Copy that hex string and pass it as --token <hex>."
+                "\n"
+                "\n  FALLBACK — use --raw-cookie if there is no token in the URL:"
+                "\n    1. Open DevTools (F12) → Network tab."
+                "\n    2. Reload the page so the /snapshot request appears."
+                "\n    3. Click the /snapshot request → Headers."
+                "\n    4. Find the 'cookie:' row.  Copy the value (NOT the word 'cookie:')."
+                "\n    5. Pass it as --raw-cookie '<paste here>'."
+                "\n"
+                "\n  See tools/README.md for full step-by-step screenshots."
             )
             if debug and body:
                 hint += f"\n\nServer response body:\n{body[:500]}"
@@ -206,7 +221,12 @@ def build_topology(
         is_relay       = (role_str == _ROLE_REPEATER)
         is_room_server = (role_str == _ROLE_ROOM_SERVER)
 
-        node: dict = {"name": device_id, "relay": is_relay}
+        node: dict = {
+            "name": device_id,
+            "relay": is_relay,
+            "lat": round(lat, 6),
+            "lon": round(lon, 6),
+        }
         if is_room_server:
             node["room_server"] = True
 
