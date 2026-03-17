@@ -56,12 +56,68 @@ Success criteria:
 | Pre-generated 10×10 grid topology (`topologies/grid_10x10.json`) | ✅ complete |
 | Path exchange in `SimNode` — flood out, direct return | ✅ complete |
 | Grid routing integration tests (3×3 flood→direct, 5×5 smoke) | ✅ complete |
+| Privacy baseline tests (`test_privacy_baseline.py`, 20 tests) | ✅ complete |
 
 ### Key invariants
 
 - No changes to MeshCore source are required or made.
 - Topology JSON is backward-compatible (all new fields are optional).
 - Python 3.9+ compatibility throughout.
+
+### Architecture decisions (locked)
+
+**`node_agent` inherits from `mesh::Mesh` only — will not incorporate `BaseChatMesh`.**
+
+`SimNode` skips `BaseChatMesh` deliberately: it gives us direct control over all
+routing hooks (`onPeerDataRecv`, `onPeerPathRecv`, `allowPacketForward`,
+`getRetransmitDelay`) without inheriting retry timers, ACK state machines, or
+application-level channel logic.  Adding `BaseChatMesh` would make instrumentation
+and routing experiments significantly harder.
+
+**A future `app_node_agent` binary will handle real-application use cases.**
+
+When it becomes necessary to simulate room servers, Companion clients, or other
+MeshCore applications, a *separate* `app_node_agent/` directory will contain a
+second executable that inherits from `BaseChatMesh` (or higher).  It will:
+- Speak the same stdin/stdout JSON protocol as `node_agent` (see Protocol Spec below).
+- Be invoked by specifying `"binary": "./app_node_agent/build/app_node_agent"` on
+  individual nodes in the topology JSON.
+- Share the `arduino_shim/` and `crypto_shim/` directories with `node_agent`.
+
+Mixed topologies (some nodes running `node_agent`, others `app_node_agent`) are
+fully supported by the orchestrator today via the per-node `binary` field.
+
+---
+
+### Node ↔ Orchestrator Protocol Specification
+
+All communication is **newline-delimited JSON** over the node's **stdin** (commands
+from orchestrator) and **stdout** (events from node).  Stderr is ignored.
+
+#### Commands (orchestrator → node, via stdin)
+
+| `type` | Other fields | Description |
+|--------|-------------|-------------|
+| `time` | `epoch: int` | Set the simulated Unix epoch.  Sent once at startup before `ready`. |
+| `rx` | `hex: str`, `snr: float`, `rssi: float` | Deliver a received packet (hex-encoded bytes). |
+| `send_text` | `dest: str`, `text: str` | Send an encrypted text message; `dest` is a pub-key hex prefix. |
+| `advert` | `name: str` | Broadcast a self-advertisement with the given display name. |
+| `quit` | — | Shut down cleanly. |
+
+#### Events (node → orchestrator, via stdout)
+
+| `type` | Other fields | Description |
+|--------|-------------|-------------|
+| `ready` | `pub: str`, `is_relay: bool` | Node is initialised; `pub` is the 64-hex public key. |
+| `tx` | `hex: str`, `len: int` | Node is transmitting a packet; orchestrator routes it to neighbours. |
+| `recv_text` | `from: str`, `name: str`, `text: str` | A decrypted text message was received. |
+| `advert` | `pub: str`, `name: str` | A peer advertisement was received and processed. |
+| `log` | `msg: str` | Informational log line (debug use). |
+
+Any future node binary (`app_node_agent` or otherwise) **must** implement all
+commands and emit at minimum `ready` and `tx` events to interoperate with the
+orchestrator.  Additional event types are ignored by the orchestrator unless
+explicitly handled.
 
 ### What the tracer can already measure
 
@@ -91,40 +147,56 @@ The development loop is established:
     messages are direct.  Confirmed by `test_grid_routing.py` asserting
     `route=FLOOD` for trace[0] and `route=DIRECT` for traces[1] and [2].
 
-### 2. Scenario-based privacy regression tests  [NEXT]
+### 2. Scenario-based privacy regression tests  [✅ DONE]
 
-Turn the tracer output into pass/fail assertions:
+`sim_tests/test_privacy_baseline.py` — 20 tests across 3 classes:
 
-```python
-# e.g. in a new sim_tests/test_privacy_baseline.py
-# Run a flood simulation; verify the witness count is above some threshold
-# (confirming the baseline is measurable), then verify a "private" protocol
-# reduces it.
-```
+- **`TestFloodExposureBaseline`**: single flood message in a zero-loss 3×3 grid.
+  Asserts flood reaches all nodes, multiple senders share fingerprint,
+  path_count grows with hop distance, source identified by zero path_count.
+- **`TestCollusionAttack`**: K colluding passive relay nodes.
+  Asserts single relay observes flood, two colluders see identical fingerprint,
+  colluders can infer source proximity from path_count, full relay collusion
+  covers every hop.
+- **`TestDirectRoutingPrivacyReduction`**: compares flood vs direct witness counts.
+  Asserts direct has fewer witnesses, ≥2× reduction ratio, residual relay
+  exposure on direct path, witness_count bounded by grid edge count.
 
-Specific tests to write:
-- **Baseline flood**: `witness_count` for a TXT_MSG in a 5-hop network
-  should be ≥ N (flood reaches most nodes).  ← partially covered by
-  `TestGridMetrics5x5.test_first_flood_reaches_most_nodes`.
-- **Direct routing**: after path learning, `witness_count` drops to exactly
-  the path length.  ← covered by `TestGridRouting3x3`.
-- **Collusion test**: given K adversarial relays each recording all observed
-  fingerprints, how often can they identify the sender?
+### 3. Privacy protocol experiments  [NEXT]
 
-### 3. Privacy protocol experiments
+#### Baseline metrics to beat  (3×3 zero-loss grid, seed=42)
 
-Candidate ideas (in order of complexity):
+Measured by `test_privacy_baseline.py`.  Any privacy-preserving protocol must
+improve on at least one of these figures without breaking message delivery.
 
-| Idea | Description | Breaks correlation? | Preserves routing? |
-|------|-------------|--------------------|--------------------|
-| **Per-hop re-encryption** | Each relay re-encrypts the payload with a fresh symmetric key, changing the fingerprint | ✅ yes | ✅ yes (needs key exchange) |
-| **Onion-style layering** | Sender wraps payload in N layers; each relay peels one | ✅ yes | ✅ yes (requires path pre-knowledge) |
-| **Dummy traffic** | Nodes inject cover traffic at a fixed rate | ✗ no (correlation still possible) | ✅ yes |
-| **Timing randomisation** | Increase retransmit jitter to prevent timing correlation | ✗ partial | ✅ yes |
-| **Path hiding** | Replace relay hash accumulation with a random tag | ✅ partial | ✅ yes (weaker path learning) |
+| Metric | Baseline | Attack enabled |
+|--------|----------|----------------|
+| Flood `witness_count` | **22** (12 edges; some traversed >1×) | Same fingerprint at every hop → cross-node correlation |
+| Flood node coverage | **100%** (9/9 nodes) | Any passive relay is a full observer |
+| Relay observer rate | **100%** (7/7 relays) | Entire relay network is a threat |
+| `path_count` range | **0–3** (source=0, corner=3) | Source identifiable by path_count=0; proximity inferred from count |
+| Direct `witness_count` | **14** (4 relay senders on path) | Residual exposure on direct path |
+| Flood→direct reduction ratio | **1.6×** (22→14) | Direct routing alone is insufficient |
 
-Start with **path hiding** (lowest complexity, direct MeshCore change) to
-establish the workflow, then move to per-hop re-encryption.
+**Targets for a successful privacy protocol:**
+- Flood correlation broken: each hop presents a distinct fingerprint (no cross-node linking)
+- Source unlinkability: no hop carries a field that identifies origin (eliminate path_count=0 signal)
+- Direct path exposure ≤ actual path length (eliminate broadcast spillover to non-path nodes)
+- Message delivery rate ≥ 95% (must not break routing)
+
+#### Candidate approaches (in order of complexity)
+
+| Idea | Breaks correlation? | Hides source? | Preserves routing? |
+|------|--------------------|--------------|--------------------|
+| **Path hiding** — replace relay hash accumulation with a random tag | ✗ no | ✅ yes (no path_count=0 signal) | ✅ yes (weaker path learning) |
+| **Per-hop re-encryption** — relay re-encrypts payload with fresh symmetric key | ✅ yes | ✅ partial | ✅ yes (needs key exchange) |
+| **Onion-style layering** — N encryption layers, each relay peels one | ✅ yes | ✅ yes | ✅ yes (requires path pre-knowledge) |
+| **Dummy traffic** — nodes inject cover packets at fixed rate | ✗ no | ✗ no | ✅ yes |
+| **Timing randomisation** — increase retransmit jitter | ✗ partial | ✗ no | ✅ yes |
+
+Start with **path hiding** (lowest complexity, directly addresses the
+path_count=0 source-identification attack) to establish the modify → test →
+measure workflow, then move to per-hop re-encryption to break correlation.
 
 ### 4. Adversarial test framework
 
@@ -158,6 +230,8 @@ by `unique_receivers` to see which adversarial nodes saw which packets.
 
 | Date | Change |
 |------|--------|
+| 2026-03-16 | Privacy baseline tests: flood exposure, collusion attack, direct reduction; 289 tests |
+| 2026-03-16 | Per-node `binary` field; `default_binary` rename; protocol spec; arch decision recorded |
 | 2026-03-16 | Grid topology generator, path exchange in SimNode, grid routing tests; 263 tests |
 | 2026-03-16 | Added `PacketTracer` + wire-format decoder; 251 tests |
 | 2026-03-16 | Added asymmetric link support to topology |

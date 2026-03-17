@@ -18,6 +18,6 @@
     "duration_secs": 90,
     "traffic_interval_secs": 8,
     "advert_interval_secs": 25,
-    "agent_binary": "./node_agent/build/node_agent"
+    "default_binary": "./node_agent/build/node_agent"
   }
 }

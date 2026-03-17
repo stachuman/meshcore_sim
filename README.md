@@ -410,7 +410,7 @@ reach `deep_valley` at all.
 | `traffic_interval_secs` | float | `10.0` | Mean seconds between random text sends (Poisson arrival) |
 | `advert_interval_secs` | float | `30.0` | How often to re-flood advertisements from all nodes |
 | `epoch` | int | `0` | Unix epoch sent to nodes on startup; `0` means use the real wall clock |
-| `agent_binary` | string | `./node_agent/build/node_agent` | Path to the compiled `node_agent` binary |
+| `default_binary` | string | `./node_agent/build/node_agent` | Default path to the node binary; individual nodes may override with a `binary` field |
 | `seed` | int | — | RNG seed; omit for non-deterministic behaviour |
 
 ### Adversarial nodes
@@ -463,7 +463,7 @@ processing or flooding.
   "simulation": {
     "warmup_secs": 5,
     "duration_secs": 60,
-    "agent_binary": "./node_agent/build/node_agent"
+    "default_binary": "./node_agent/build/node_agent"
   }
 }
 ```

@@ -41,6 +41,7 @@ class TestDataclassDefaults(unittest.TestCase):
         self.assertFalse(n.relay)
         self.assertIsNone(n.prv_key)
         self.assertIsNone(n.adversarial)
+        self.assertIsNone(n.binary)
 
     def test_edge_config_defaults(self):
         e = EdgeConfig(a="x", b="y")
@@ -56,7 +57,7 @@ class TestDataclassDefaults(unittest.TestCase):
         self.assertEqual(s.traffic_interval_secs, 10.0)
         self.assertEqual(s.advert_interval_secs, 30.0)
         self.assertEqual(s.epoch, 0)
-        self.assertEqual(s.agent_binary, "./node_agent/build/node_agent")
+        self.assertEqual(s.default_binary, "./node_agent/build/node_agent")
         self.assertIsNone(s.seed)
 
 
@@ -217,6 +218,24 @@ class TestLoadTopologyFromInlineJSON(unittest.TestCase):
     def test_relay_true_parsed(self):
         topo = self._load({"nodes": [{"name": "r", "relay": True}]})
         self.assertTrue(topo.nodes[0].relay)
+
+    def test_per_node_binary_none_by_default(self):
+        topo = self._load({"nodes": [{"name": "x"}]})
+        self.assertIsNone(topo.nodes[0].binary)
+
+    def test_per_node_binary_parsed(self):
+        topo = self._load({"nodes": [
+            {"name": "x", "binary": "./app_node_agent/build/app_node_agent"},
+        ]})
+        self.assertEqual(topo.nodes[0].binary, "./app_node_agent/build/app_node_agent")
+
+    def test_default_binary_json_key_parsed(self):
+        topo = self._load({"simulation": {"default_binary": "./custom_agent"}})
+        self.assertEqual(topo.simulation.default_binary, "./custom_agent")
+
+    def test_legacy_agent_binary_json_key_still_works(self):
+        topo = self._load({"simulation": {"agent_binary": "./legacy_agent"}})
+        self.assertEqual(topo.simulation.default_binary, "./legacy_agent")
 
     def test_adversarial_replay_mode_parsed(self):
         topo = self._load({

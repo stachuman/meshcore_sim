@@ -28,6 +28,7 @@ class NodeConfig:
     relay: bool = False
     prv_key: Optional[str] = None          # 128 hex chars or None
     adversarial: Optional[AdversarialConfig] = None
+    binary: Optional[str] = None           # per-node binary override (None → use SimulationConfig.default_binary)
 
 
 @dataclass
@@ -62,7 +63,7 @@ class SimulationConfig:
     traffic_interval_secs: float = 10.0   # mean seconds between random sends
     advert_interval_secs: float = 30.0
     epoch: int = 0                         # 0 → use wall-clock time
-    agent_binary: str = "./node_agent/build/node_agent"
+    default_binary: str = "./node_agent/build/node_agent"
     seed: Optional[int] = None
 
 
@@ -109,6 +110,7 @@ def load_topology(path: str) -> TopologyConfig:
             relay=bool(n.get("relay", False)),
             prv_key=n.get("prv_key"),
             adversarial=adv,
+            binary=n.get("binary"),
         ))
 
     edges = []
@@ -131,7 +133,11 @@ def load_topology(path: str) -> TopologyConfig:
         traffic_interval_secs=float(sim_raw.get("traffic_interval_secs", 10.0)),
         advert_interval_secs=float(sim_raw.get("advert_interval_secs", 30.0)),
         epoch=int(sim_raw.get("epoch", 0)),
-        agent_binary=sim_raw.get("agent_binary", "./node_agent/build/node_agent"),
+        # Accept both "default_binary" (current) and "agent_binary" (legacy) in JSON.
+        default_binary=(
+            sim_raw.get("default_binary")
+            or sim_raw.get("agent_binary", "./node_agent/build/node_agent")
+        ),
         seed=sim_raw.get("seed"),
     )
     if sim.epoch == 0:

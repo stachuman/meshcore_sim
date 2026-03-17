@@ -171,7 +171,8 @@ class NodeAgent:
     # ------------------------------------------------------------------
 
     def _build_cmd(self) -> list[str]:
-        cmd = [self.sim_config.agent_binary]
+        binary = self.config.binary or self.sim_config.default_binary
+        cmd = [binary]
         if self.config.relay:
             cmd.append("--relay")
         cmd += ["--name", self.config.name]

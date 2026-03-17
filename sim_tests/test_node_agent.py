@@ -15,7 +15,7 @@ from orchestrator.config import NodeConfig, SimulationConfig
 from orchestrator.node import NodeAgent
 from sim_tests.helpers import BINARY_PATH, SKIP_IF_NO_BINARY
 
-_SIM = SimulationConfig(agent_binary=BINARY_PATH)
+_SIM = SimulationConfig(default_binary=BINARY_PATH)
 
 # Hex string: exactly 64 lower/uppercase hex characters
 _HEX64 = re.compile(r"^[0-9a-fA-F]{64}$")
@@ -59,6 +59,16 @@ class TestBuildCmd(unittest.TestCase):
     def test_no_prv_flag_without_key(self):
         cmd = self._agent()._build_cmd()
         self.assertNotIn("--prv", cmd)
+
+    def test_per_node_binary_overrides_sim_default(self):
+        cfg = NodeConfig(name="app", binary="/custom/app_node_agent")
+        cmd = NodeAgent(cfg, _SIM)._build_cmd()
+        self.assertEqual(cmd[0], "/custom/app_node_agent")
+
+    def test_no_per_node_binary_uses_sim_default(self):
+        cfg = NodeConfig(name="relay")
+        cmd = NodeAgent(cfg, _SIM)._build_cmd()
+        self.assertEqual(cmd[0], BINARY_PATH)
 
 
 # ---------------------------------------------------------------------------

@@ -51,7 +51,7 @@ def linear_three_config(**sim_overrides) -> TopologyConfig:
         duration_secs=10.0,
         traffic_interval_secs=2.0,
         advert_interval_secs=30.0,
-        agent_binary=BINARY_PATH,
+        default_binary=BINARY_PATH,
         seed=42,
     )
     for k, v in sim_overrides.items():
@@ -80,7 +80,7 @@ def two_node_direct_config(**sim_overrides) -> TopologyConfig:
         duration_secs=5.0,
         traffic_interval_secs=1.0,
         advert_interval_secs=30.0,
-        agent_binary=BINARY_PATH,
+        default_binary=BINARY_PATH,
         seed=1,
     )
     for k, v in sim_overrides.items():
@@ -139,7 +139,7 @@ def grid_topo_config(rows: int, cols: int, **sim_overrides) -> TopologyConfig:
         duration_secs=60.0,
         traffic_interval_secs=8.0,
         advert_interval_secs=30.0,
-        agent_binary=BINARY_PATH,
+        default_binary=BINARY_PATH,
         seed=42,
     )
     for k, v in sim_overrides.items():
@@ -159,7 +159,7 @@ def adversarial_config(mode: str, probability: float = 1.0, **adv_extras) -> Top
         duration_secs=8.0,
         traffic_interval_secs=1.5,
         advert_interval_secs=30.0,
-        agent_binary=BINARY_PATH,
+        default_binary=BINARY_PATH,
         seed=7,
     )
     return TopologyConfig(

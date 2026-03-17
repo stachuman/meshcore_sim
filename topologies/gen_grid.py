@@ -46,7 +46,7 @@ def gen_grid(
     duration_secs: float = 120.0,
     traffic_interval_secs: float = 10.0,
     advert_interval_secs: float = 30.0,
-    agent_binary: str = "./node_agent/build/node_agent",
+    default_binary: str = "./node_agent/build/node_agent",
 ) -> dict:
     """Return a topology dict suitable for json.dumps()."""
 
@@ -97,7 +97,7 @@ def gen_grid(
             "duration_secs": duration_secs,
             "traffic_interval_secs": traffic_interval_secs,
             "advert_interval_secs": advert_interval_secs,
-            "agent_binary": agent_binary,
+            "default_binary": default_binary,
         },
     }
 

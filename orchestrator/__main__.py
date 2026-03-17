@@ -34,7 +34,7 @@ async def run(args: object) -> int:
     if args.warmup is not None:            sim.warmup_secs = args.warmup              # type: ignore[attr-defined]
     if args.traffic_interval is not None:  sim.traffic_interval_secs = args.traffic_interval  # type: ignore[attr-defined]
     if args.advert_interval is not None:   sim.advert_interval_secs = args.advert_interval  # type: ignore[attr-defined]
-    if args.agent is not None:             sim.agent_binary = args.agent              # type: ignore[attr-defined]
+    if args.agent is not None:             sim.default_binary = args.agent            # type: ignore[attr-defined]
     if args.seed is not None:              sim.seed = args.seed                       # type: ignore[attr-defined]
 
     rng = random.Random(sim.seed)
