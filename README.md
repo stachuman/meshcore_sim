@@ -78,13 +78,16 @@ meshcore_sim/
 │   ├── test_packet_decode.py    Wire-format decoder (30 tests, no binary needed)
 │   ├── test_tracer.py           PacketTracer path and witness tracking (26 tests)
 │   ├── test_integration_smoke.py  End-to-end simulation smoke tests
+│   ├── test_grid_routing.py     Flood → direct routing transition (3×3, 5×5 grids)
 │   └── test_cpp_suite.py        Runs the C++ binary as part of the Python suite
 │
 └── topologies/             Example topology JSON files
     ├── linear_three.json
     ├── star_five.json
     ├── adversarial.json
-    └── asymmetric_hill.json
+    ├── asymmetric_hill.json
+    ├── gen_grid.py         Generator: python3 topologies/gen_grid.py ROWS COLS -o out.json
+    └── grid_10x10.json     Pre-generated 10×10 grid (100 nodes)
 ```
 
 ---
@@ -161,7 +164,7 @@ manually.
 python3 -m sim_tests
 ```
 
-This runs all 251 tests:
+This runs all 263 tests:
 
 | Group | Count | Binary needed |
 |-------|------:|---------------|
@@ -169,6 +172,7 @@ This runs all 251 tests:
 | Python unit — config, topology, adversarial, metrics | 118 | none |
 | Python unit — packet decoder, path tracer | 56 | none |
 | Python integration — NodeAgent, simulation smoke tests | 68 | `node_agent/build/node_agent` |
+| Python integration — grid routing (flood→direct transition) | 12 | `node_agent/build/node_agent` |
 
 † Each group wrapper drives the C++ binary with a name filter; the 9 wrappers
 cover 45 internal C++ test cases and 107 checks.
@@ -239,6 +243,9 @@ python3 -m orchestrator topologies/adversarial.json \
 
 # Asymmetric RF links
 python3 -m orchestrator topologies/asymmetric_hill.json --duration 120
+
+# 10×10 grid — 100 nodes, flood out / direct return
+python3 -m orchestrator topologies/grid_10x10.json
 ```
 
 ### Metrics report
@@ -463,6 +470,70 @@ processing or flooding.
 
 ---
 
+## Grid topologies
+
+`topologies/gen_grid.py` generates rectangular orthogonal grids (4-connectivity):
+
+```
+n_0_0 ── n_0_1 ── n_0_2
+  |         |         |
+n_1_0 ── n_1_1 ── n_1_2
+  |         |         |
+n_2_0 ── n_2_1 ── n_2_2
+```
+
+- **`n_0_0`** — source endpoint (not a relay)
+- **`n_{R-1}_{C-1}`** — destination endpoint (not a relay)
+- **All other nodes** — relays
+
+The grid is the simplest topology that exercises multi-hop routing and path
+learning across many parallel paths.
+
+### Generating a custom grid
+
+```sh
+# 5×5 grid with 1% loss and 10 ms per-hop latency
+python3 topologies/gen_grid.py 5 5 --loss 0.01 --latency 10 -o topologies/grid_5x5.json
+
+# 10×10 square grid (default parameters) — already committed
+python3 topologies/gen_grid.py 10 10 -o topologies/grid_10x10.json
+```
+
+Run `python3 topologies/gen_grid.py --help` for all options.
+
+### Running the 10×10 grid
+
+```sh
+python3 -m orchestrator topologies/grid_10x10.json
+```
+
+Default parameters: 10-second warmup, 120-second simulation, traffic every
+10 seconds.  With 100 nodes this takes a few seconds to start up (one
+subprocess per node).
+
+What to look for in the output:
+
+1. **First TXT_MSG** — `route=FLOOD`, `witnesses` close to the grid size.
+   Every relay re-broadcasts; the adversary can observe the packet at many
+   nodes.
+2. **PATH packet** — emitted by the destination immediately after receiving
+   the flood.  `witnesses` are low (the PATH floods back along the reverse
+   path only).
+3. **Subsequent TXT_MSG** — `route=DIRECT`, `witnesses` drops to roughly
+   the number of hops on the direct path.  The adversary now sees far fewer
+   copies.
+
+Example excerpt (3×3 grid for clarity):
+
+```
+[TXT_MSG] 022c20b1… witnesses=9  route=FLOOD   ← first send: everyone sees it
+[PATH   ] 03a1f4c8… witnesses=4  route=FLOOD   ← path reply floods back
+[TXT_MSG] 025e91d3… witnesses=4  route=DIRECT  ← second send: only 4 nodes see it
+[TXT_MSG] 026b73a1… witnesses=4  route=DIRECT  ← reply: also direct
+```
+
+---
+
 ## Architecture
 
 ### Overview
@@ -504,6 +575,58 @@ The binary links directly against the MeshCore C++ source (compiled from the
   classes (`SHA256`, `AES128`, `Ed25519`) backed by OpenSSL 3.x EVP.
 
 No changes to MeshCore source are required.  The submodule is compiled as-is.
+
+### SimNode design: why we skip BaseChatMesh
+
+MeshCore's class hierarchy is:
+
+```
+Dispatcher          ← raw radio loop, packet queue
+  └── Mesh          ← flood routing, dedup, crypto dispatch, path-building API
+        └── BaseChatMesh   ← contact book, path exchange, ACKs, retries, UI hooks
+              └── YourFirmware   ← device UI and storage
+```
+
+`SimNode` inherits directly from `Mesh`, **skipping `BaseChatMesh`**.  This is
+a deliberate choice for the privacy research goal:
+
+| Feature | BaseChatMesh | SimNode | Notes |
+|---------|:---:|:---:|-------|
+| Flood routing, dedup, crypto | ✅ | ✅ | from `Mesh` |
+| Path exchange (flood out → direct back) | ✅ | ✅ | reimplemented in `onPeerDataRecv` |
+| ACK piggybacked in PATH reply | ✅ | ✗ | sender never knows delivery confirmed |
+| Send retry with timeout | ✅ | ✗ | `sendTextTo` is fire-and-forget |
+| Reciprocal PATH on `onPeerPathRecv` returning true | ✅ | ✗ | omitted for simplicity |
+| `sendFloodScoped` (directional flood filter) | ✅ | ✗ | plain `sendFlood` used instead |
+| Zero retransmit jitter | ✗ | ✅ | `getRetransmitDelay` overridden to 0 |
+
+**Path exchange** (the mechanism that turns a flood-routed first message into
+a direct-routed subsequent message) is the same call sequence as
+`BaseChatMesh`:
+
+1. Destination receives a flood `TXT_MSG` whose `packet->path[]` holds the
+   relay-hash sequence accumulated in transit.
+2. Destination calls `createPathReturn(sender_id, shared_secret, packet->path,
+   packet->path_len, 0, nullptr, 0)` and `sendFlood(rpath)`.
+3. Sender receives the `PAYLOAD_TYPE_PATH` packet; `onPeerPathRecv` stores
+   the path bytes and sets `has_path = true`.
+4. Destination stores the *reversed* relay-hash sequence as its own route back.
+5. Both nodes now have a direct path; future calls to `sendTextTo` use
+   `sendDirect` instead of `sendFlood`.
+
+The reason to keep this code **in `SimNode.cpp`** rather than inheriting it
+from `BaseChatMesh` is that `SimNode.cpp` is our file — easy to read, modify,
+and instrument.  Future privacy experiments (per-hop re-encryption, path
+hiding, onion layers) will modify or replace exactly this logic without
+touching the MeshCore submodule.
+
+**Zero retransmit jitter** (`getRetransmitDelay` returns 0) is essential for
+test determinism.  The default MeshCore implementation returns a random delay
+proportional to estimated airtime — up to ~10 seconds per hop for typical
+packet sizes.  In a multi-hop grid, full flood propagation could take minutes
+under the default setting, making tests impractically slow.  Setting jitter to
+zero means floods propagate as fast as the per-link `latency_ms` and the
+Python asyncio scheduler allow.
 
 ### Wire protocol
 

@@ -50,8 +50,12 @@ Success criteria:
 | `PacketTracer` — per-packet path & witness analysis | ✅ complete |
 | `packet.py` — pure-Python MeshCore wire-format decoder | ✅ complete |
 | C++ unit tests (crypto shims, packet serialisation) | ✅ complete |
-| Python unit tests (251 tests, all passing) | ✅ complete |
+| Python unit tests (263 tests, all passing) | ✅ complete |
 | Example topologies (linear, star, adversarial, asymmetric hill) | ✅ complete |
+| Grid topology generator (`topologies/gen_grid.py`) | ✅ complete |
+| Pre-generated 10×10 grid topology (`topologies/grid_10x10.json`) | ✅ complete |
+| Path exchange in `SimNode` — flood out, direct return | ✅ complete |
+| Grid routing integration tests (3×3 flood→direct, 5×5 smoke) | ✅ complete |
 
 ### Key invariants
 
@@ -73,23 +77,21 @@ Every simulation run now emits a **Packet Path Trace** section:
 
 ## Next steps  (prioritised)
 
-### 1. Routing modification workflow  [NEXT]
+### 1. Routing modification workflow  [✅ DONE]
 
-Before writing a new protocol, establish the development loop:
+The development loop is established:
 
-- Understand exactly which functions in `Mesh.cpp` and `Dispatcher.cpp`
-  control routing decisions.  Key hooks:
-  - `routeRecvPacket()` — decides whether/how to rebroadcast a flood packet.
-  - `allowPacketForward()` — per-node relay policy (currently `_is_relay`).
-  - `getRetransmitDelay()` — jitter before rebroadcast.
-  - `createDatagram()` / `sendFlood()` / `sendDirect()` — packet construction.
-- Decide the patching strategy: fork the MeshCore submodule on a private
-  branch, or use a `node_agent`-level overlay (e.g. a subclass of `SimNode`
-  that overrides methods without touching upstream files).
-- Write a minimal "canary" modification (e.g. change retransmit jitter) and
-  verify that the tracer's `witness_count` changes as expected.
+- Key hooks mapped: `routeRecvPacket`, `allowPacketForward`, `getRetransmitDelay`,
+  `onPeerDataRecv`, `onPeerPathRecv`, `createPathReturn`, `sendFlood`, `sendDirect`.
+- Patching strategy decided: `SimNode` inherits directly from `Mesh` (skips
+  `BaseChatMesh`), so all routing logic lives in our files without touching upstream.
+- Canary modifications verified:
+  - `getRetransmitDelay` overridden to 0 → flood propagation now instant.
+  - Path exchange added to `onPeerDataRecv` → first message floods, subsequent
+    messages are direct.  Confirmed by `test_grid_routing.py` asserting
+    `route=FLOOD` for trace[0] and `route=DIRECT` for traces[1] and [2].
 
-### 2. Scenario-based privacy regression tests
+### 2. Scenario-based privacy regression tests  [NEXT]
 
 Turn the tracer output into pass/fail assertions:
 
@@ -102,9 +104,10 @@ Turn the tracer output into pass/fail assertions:
 
 Specific tests to write:
 - **Baseline flood**: `witness_count` for a TXT_MSG in a 5-hop network
-  should be ≥ N (flood reaches most nodes).
+  should be ≥ N (flood reaches most nodes).  ← partially covered by
+  `TestGridMetrics5x5.test_first_flood_reaches_most_nodes`.
 - **Direct routing**: after path learning, `witness_count` drops to exactly
-  the path length.
+  the path length.  ← covered by `TestGridRouting3x3`.
 - **Collusion test**: given K adversarial relays each recording all observed
   fingerprints, how often can they identify the sender?
 
@@ -155,6 +158,7 @@ by `unique_receivers` to see which adversarial nodes saw which packets.
 
 | Date | Change |
 |------|--------|
+| 2026-03-16 | Grid topology generator, path exchange in SimNode, grid routing tests; 263 tests |
 | 2026-03-16 | Added `PacketTracer` + wire-format decoder; 251 tests |
 | 2026-03-16 | Added asymmetric link support to topology |
 | 2026-03-16 | Added adversarial node model (drop/corrupt/replay) |
