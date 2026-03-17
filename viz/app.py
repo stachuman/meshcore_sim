@@ -45,7 +45,8 @@ _ROLE_COLOUR: dict[str, str] = {
 _EDGE_COLOUR     = "#adb5bd"
 _EDGE_COLOUR_GEO = "rgba(173,181,189,0.6)"
 _SENDER_COLOUR   = "#f77f00"   # orange — active packet senders
-_RECEIVER_COLOUR = "#2dc653"   # green  — active packet receivers
+_RECEIVER_COLOUR = "#2dc653"   # green  — active packet receivers (current step)
+_RECEIVED_COLOUR = "#74c69d"   # muted green — received this packet (other steps)
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -113,6 +114,7 @@ def _geo_figure(
     edges: list[dict],
     witness_counts: Optional[dict[str, int]] = None,
     max_count: int = 0,
+    packet_witnesses: Optional[set] = None,
     highlight_senders: Optional[list[str]] = None,
     highlight_receivers: Optional[list[str]] = None,
 ) -> go.Figure:
@@ -169,6 +171,31 @@ def _geo_figure(
                     x=1.0,
                 ),
             ),
+            text=texts,
+            hoverinfo="text",
+            showlegend=False,
+        )]
+    elif packet_witnesses is not None:
+        # Per-packet mode: muted green = received this packet, grey = did not
+        lats   = [float(n["lat"]) for n in nodes]
+        lons   = [float(n["lon"]) for n in nodes]
+        colors = [
+            _RECEIVED_COLOUR if n["name"] in packet_witnesses else "#e9ecef"
+            for n in nodes
+        ]
+        texts  = [
+            f"<b>{_short(n['name'])}</b><br>"
+            f"{n['name']}<br>"
+            f"role: {_node_role(n)}<br>"
+            f"received: {'yes' if n['name'] in packet_witnesses else 'no'}<br>"
+            f"lat: {n['lat']:.5f}  lon: {n['lon']:.5f}"
+            for n in nodes
+        ]
+        node_traces = [go.Scattermapbox(
+            lat=lats,
+            lon=lons,
+            mode="markers",
+            marker=dict(size=8, color=colors),
             text=texts,
             hoverinfo="text",
             showlegend=False,
@@ -615,10 +642,21 @@ def _sidebar(
             ),
             html.Div(
                 [
-                    html.Span("■ sender  ", style={"color": _SENDER_COLOUR, "fontSize": "11px"}),
-                    html.Span("■ receiver", style={"color": _RECEIVER_COLOUR, "fontSize": "11px"}),
+                    html.Span("■ sender  ",  style={"color": _SENDER_COLOUR,   "fontSize": "11px"}),
+                    html.Span("■ receiver ", style={"color": _RECEIVER_COLOUR, "fontSize": "11px"}),
+                    html.Span("■ witnessed", style={"color": _RECEIVED_COLOUR, "fontSize": "11px"}),
                 ],
                 style={"marginBottom": "6px"},
+            ),
+            dcc.RadioItems(
+                id="view-mode",
+                options=[
+                    {"label": " Global exposure heatmap", "value": "global"},
+                    {"label": " Per-packet witness map",  "value": "packet"},
+                ],
+                value="global",
+                style={"fontSize": "12px", "marginBottom": "6px"},
+                labelStyle={"display": "block", "marginBottom": "2px"},
             ),
             play_row,
             slider,
@@ -775,10 +813,12 @@ def create_app(
                 Output("hop-info", "children"),
                 Input("packet-slider", "value"),
                 Input("hop-slider", "value"),
+                Input("view-mode", "value"),
             )
-            def _on_packet_geo(idx: int, hop_idx: int) -> tuple:
-                idx = idx or 0
-                step_idx = hop_idx if hop_idx is not None else -1
+            def _on_packet_geo(idx: int, hop_idx: int, view_mode: str) -> tuple:
+                idx       = idx or 0
+                view_mode = view_mode or "global"
+                step_idx  = hop_idx if hop_idx is not None else -1
                 pkt   = packets[idx]
                 steps = all_steps[idx]
                 if 0 <= step_idx < len(steps):
@@ -788,8 +828,14 @@ def create_app(
                 else:
                     senders   = pkt["unique_senders"]
                     receivers = pkt["unique_receivers"]
+                pkt_witnesses = (
+                    set(pkt["unique_receivers"]) if view_mode == "packet" else None
+                )
                 fig = _geo_figure(
-                    nodes, edges, w_counts, max_w,
+                    nodes, edges,
+                    witness_counts=w_counts if view_mode == "global" else None,
+                    max_count=max_w if view_mode == "global" else 0,
+                    packet_witnesses=pkt_witnesses,
                     highlight_senders=senders,
                     highlight_receivers=receivers,
                 )
@@ -806,10 +852,12 @@ def create_app(
                 Output("hop-info", "children"),
                 Input("packet-slider", "value"),
                 Input("hop-slider", "value"),
+                Input("view-mode", "value"),
             )
-            def _on_packet_cyto(idx: int, hop_idx: int) -> tuple:
-                idx = idx or 0
-                step_idx = hop_idx if hop_idx is not None else -1
+            def _on_packet_cyto(idx: int, hop_idx: int, view_mode: str) -> tuple:
+                idx       = idx or 0
+                view_mode = view_mode or "global"
+                step_idx  = hop_idx if hop_idx is not None else -1
                 pkt   = packets[idx]
                 steps = all_steps[idx]
                 if 0 <= step_idx < len(steps):
@@ -820,6 +868,20 @@ def create_app(
                     senders   = pkt["unique_senders"]
                     receivers = pkt["unique_receivers"]
                 stylesheet = list(_CYTO_STYLESHEET)
+                # Per-packet mode: override each node's base colour before overlays.
+                # Nodes that received this packet → muted green; others → grey.
+                # Sender/receiver overlays (added below) win via CSS ordering.
+                if view_mode == "packet":
+                    pkt_witnesses = set(pkt["unique_receivers"])
+                    for n in nodes:
+                        colour = (
+                            _RECEIVED_COLOUR if n["name"] in pkt_witnesses
+                            else "#e9ecef"
+                        )
+                        stylesheet.append({
+                            "selector": f'node[id = "{n["name"]}"]',
+                            "style": {"background-color": colour},
+                        })
                 for s in senders:
                     stylesheet.append({
                         "selector": f'node[id = "{s}"]',
