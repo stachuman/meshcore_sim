@@ -566,7 +566,7 @@ def _sidebar(
                     dcc.Checklist(
                         id="hop-play-mode",
                         options=[{"label": " animate hops", "value": "hop"}],
-                        value=[],
+                        value=["hop"],
                         style={"fontSize": "12px", "color": "#495057"},
                     ),
                 ],
@@ -654,7 +654,7 @@ def _sidebar(
                     {"label": " Global exposure heatmap", "value": "global"},
                     {"label": " Per-packet witness map",  "value": "packet"},
                 ],
-                value="global",
+                value="packet",
                 style={"fontSize": "12px", "marginBottom": "6px"},
                 labelStyle={"display": "block", "marginBottom": "2px"},
             ),
