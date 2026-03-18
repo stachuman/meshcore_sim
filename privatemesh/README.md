@@ -157,9 +157,9 @@ round trip), reducing the number of relay nodes that observe each message.
   the routing table.  If a multi-hop route is cached, use `sendDirect`
   immediately — no prior message to that destination required.
 
-**Memory budget**: `RT_MAX_ROUTES × sizeof(RouteEntry) = 32 × 14 = 448 bytes`
+**Memory budget**: `RT_MAX_ROUTES × sizeof(RouteEntry) = 64 × 70 = 4480 bytes`
 
-**Patch size**: ~120 lines added to `SimNode.cpp`, zero changes to `SimNode.h`.
+**Patch size**: ~148 lines added to `SimNode.cpp`, zero changes to `SimNode.h`.
 
 **Binary**: `privatemesh/nexthop/build/nexthop_agent`
 

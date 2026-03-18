@@ -25,11 +25,11 @@ static void bytes_to_hex(char* out, const uint8_t* in, size_t len) {
 // (suitable for passing directly to sendDirect) and tracks an age counter so
 // stale entries are evicted after RT_MAX_AGE advertisement cycles.
 //
-// Memory budget: RT_MAX_ROUTES × sizeof(RouteEntry) = 32 × 14 = 448 bytes.
+// Memory budget: RT_MAX_ROUTES × sizeof(RouteEntry) = 64 × 70 = 4480 bytes.
 // ---------------------------------------------------------------------------
-#define RT_MAX_ROUTES  32   // number of table slots
+#define RT_MAX_ROUTES  64   // number of table slots (must exceed network size for best coverage)
 #define RT_MAX_AGE      3   // expire after this many advert cycles without refresh
-#define RT_PATH_CAP     8   // max relay-path bytes stored per entry (8 hops @ 1 B each)
+#define RT_PATH_CAP    64   // max relay-path bytes per entry (= MAX_PATH_SIZE; fits any path)
 #define RT_AGE_EVERY   16   // increment ages every N adverts received
 
 struct RouteEntry {
@@ -94,13 +94,25 @@ static void rt_upsert(const uint8_t dest[2],
         ne.age        = 0;
         return;
     }
-    // Table full: evict stalest entry if new route is strictly better.
+    // Table full: prefer evicting useless direct-neighbour entries (path_bytes=0)
+    // first; among equally-useful entries, evict the stalest.
     uint8_t worst = 0;
     for (uint8_t i = 1; i < rt_count; i++) {
-        if (rt_table[i].age > rt_table[worst].age)
-            worst = i;
+        bool i_useless    = (rt_table[i].path_bytes == 0);
+        bool worst_useless = (rt_table[worst].path_bytes == 0);
+        if (i_useless && !worst_useless) {
+            worst = i;   // always prefer evicting a useless entry
+        } else if (i_useless == worst_useless) {
+            // Both equally useful (or useless): pick stalest
+            if (rt_table[i].age > rt_table[worst].age)
+                worst = i;
+        }
     }
-    if (metric < rt_table[worst].metric) {
+    // Replace if the incoming route is useful (has a path) and the worst slot
+    // is either useless or strictly older than us.
+    bool incoming_useful = (path_bytes > 0);
+    bool worst_useless   = (rt_table[worst].path_bytes == 0);
+    if (incoming_useful && (worst_useless || metric < rt_table[worst].metric)) {
         rt_table[worst].dest[0]    = dest[0];
         rt_table[worst].dest[1]    = dest[1];
         uint8_t n                  = std::min(path_bytes, (uint8_t)RT_PATH_CAP);

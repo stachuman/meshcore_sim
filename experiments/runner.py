@@ -176,8 +176,12 @@ async def _run_async(
         src_name = endpoints[0]
         dst_name = endpoints[-1]
         dst_pub  = agents[dst_name].state.pub_key
-        for _ in range(scenario.rounds):
-            await agents[src_name].send_text(dst_pub, "experiment-msg")
+        for i in range(scenario.rounds):
+            # Use a unique text per round so MetricsCollector can correlate
+            # send→receive events correctly (it keys on message text).
+            msg = f"experiment-msg-{i}"
+            metrics.record_send_attempt(src_name, dst_pub, msg)
+            await agents[src_name].send_text(dst_pub, msg)
             await asyncio.sleep(scenario.settle_secs)
 
     await asyncio.gather(*(a.quit() for a in agents.values()),
