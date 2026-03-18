@@ -223,6 +223,23 @@ be overridden per-run with the orchestrator's CLI flags.
 | `--binary PATH` | `./node_agent/build/node_agent` | `simulation.default_binary` |
 | `--seed N` | `42` | RNG seed |
 
+### Radio parameters
+
+Written into the `radio` block of the output JSON.  Used by the orchestrator's
+`--rf-model airtime` and `--rf-model contention` modes to compute LoRa on-air
+times and detect RF collisions.  Defaults match the MeshCore source
+(`simple_repeater/MyMesh.cpp`: SF10, BW 250 kHz, CR4/5).
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--sf N` | `10` | LoRa spreading factor (7–12) |
+| `--bw-hz N` | `250000` | Bandwidth in Hz (e.g. 125000, 250000, 500000) |
+| `--cr N` | `1` | Coding-rate offset: 1=CR4/5, 2=CR4/6, 3=CR4/7, 4=CR4/8 |
+
+The `radio` section is **always emitted** (even when the default values are
+used) so that the resulting topology file is immediately usable with
+`--rf-model airtime` or `--rf-model contention` without manual editing.
+
 ### Diagnostics
 
 | Flag | Description |
@@ -257,6 +274,7 @@ python3 tools/fetch_topology.py \
 #             573 edges (min_count=5, max_dist=50.0 km)
 #             edge count range: 5–2433
 #             distance range:   0.01–38.8 km
+#   Radio:    SF10 / BW250 kHz / CR4/5
 #   Written to topologies/boston_relays.json
 
 # Simulate

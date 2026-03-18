@@ -27,7 +27,7 @@ $ python3 -m orchestrator topologies/linear_three.json --duration 30 --seed 42
 5. [Running the tests](#running-the-tests)
 6. [Orchestrator reference](#orchestrator-reference)
 7. [Topology visualiser](#topology-visualiser)
-8. [Topology file format](#topology-file-format)
+8. [Topology file format](#topology-file-format) (`nodes`, `edges`, `simulation`, `radio`, adversarial)
 9. [Architecture](#architecture)
 
 ---
@@ -54,10 +54,12 @@ meshcore_sim/
 │   ├── config.py           Topology JSON loader and dataclasses
 │   ├── topology.py         Adjacency graph (directed EdgeLinks)
 │   ├── node.py             NodeAgent: asyncio subprocess wrapper
-│   ├── router.py           PacketRouter: TX callbacks, loss, latency, adversarial
+│   ├── router.py           PacketRouter: TX callbacks, loss, latency, adversarial, RF model
 │   ├── adversarial.py      AdversarialFilter: drop / corrupt / replay modes
+│   ├── airtime.py          LoRa on-air time formula (Semtech AN1200.13)
+│   ├── channel.py          ChannelModel: RF contention and capture-effect detection
 │   ├── traffic.py          TrafficGenerator: advert floods, random text sends
-│   ├── metrics.py          Counters, delivery rate, latency, report
+│   ├── metrics.py          Counters, delivery rate, latency, collision count, report
 │   ├── packet.py           Wire-format decoder (pure Python, no binary needed)
 │   ├── tracer.py           PacketTracer: per-packet path and witness analysis
 │   └── cli.py              argparse CLI definition
@@ -77,11 +79,12 @@ meshcore_sim/
 │   ├── test_metrics.py          Counters, delivery tracking, report formatting
 │   ├── test_node_agent.py       NodeAgent lifecycle and commands
 │   ├── test_packet_decode.py    Wire-format decoder (30 tests, no binary needed)
-│   ├── test_tracer.py           PacketTracer path and witness tracking (26 tests)
+│   ├── test_tracer.py           PacketTracer path, witness tracking, collisions (38 tests)
 │   ├── test_integration_smoke.py  End-to-end simulation smoke tests
 │   ├── test_grid_routing.py     Flood → direct routing transition (3×3, 5×5 grids)
 │   ├── test_privacy_baseline.py Privacy exposure metrics (20 tests)
 │   ├── test_room_server.py      Room server forwarding end-to-end (12 tests)
+│   ├── test_airtime.py          LoRa airtime formula + RF contention model (19 tests)
 │   └── test_cpp_suite.py        Runs the C++ binary as part of the Python suite
 │
 ├── demo/                   Interactive demos
@@ -97,6 +100,7 @@ meshcore_sim/
 │   └── requirements.txt    viz-only deps (dash, plotly, dash-cytoscape)
 │
 ├── requirements.txt        Optional viz dependencies (pip install -r requirements.txt)
+├── EXAMPLES.md             Worked example simulations with commands and expected output
 │
 └── topologies/             Example topology JSON files
     ├── linear_three.json
@@ -189,13 +193,15 @@ manually.
 python3 -m sim_tests
 ```
 
-This runs all 313 tests:
+This runs all 345 tests:
 
 | Group | Count | Binary needed |
 |-------|------:|---------------|
 | C++ crypto (SHA-256, HMAC, AES-128, Ed25519, ECDH, encrypt) | 9 groups† | `tests/build/meshcore_tests` |
 | Python unit — config, topology, adversarial, metrics | 118 | none |
 | Python unit — packet decoder, path tracer | 59 | none |
+| Python unit — LoRa airtime formula + RF contention model | 19 | none |
+| Python unit — collision tracer (`CollisionRecord`, `record_collision`, schema v2) | 12 | none |
 | Python integration — NodeAgent, simulation smoke tests | 72 | `node_agent/build/node_agent` |
 | Python integration — grid routing (flood→direct transition) | 12 | `node_agent/build/node_agent` |
 | Python integration — privacy baseline (flood exposure, collusion) | 20 | `node_agent/build/node_agent` |
@@ -254,6 +260,7 @@ python3 -m orchestrator <topology.json> [options]
 | `--log-level` | `info` | `debug` / `info` / `warning` / `error` |
 | `--report FILE` | — | Write final metrics report to a file (always printed to stdout) |
 | `--trace-out FILE` | — | Write packet trace data to a JSON file (load with `python3 -m viz`) |
+| `--rf-model` | `none` | RF physical-layer model: `none` (instant delivery), `airtime` (delay by LoRa on-air time + propagation), `contention` (airtime + collision detection). Requires a `radio` section in the topology JSON. |
 
 ### Examples
 
@@ -279,7 +286,40 @@ python3 -m orchestrator topologies/asymmetric_hill.json --duration 120
 
 # 10×10 grid — 100 nodes, flood out / direct return
 python3 -m orchestrator topologies/grid_10x10.json
+
+# 10×10 grid with LoRa airtime delays (SF10, BW250 kHz — MeshCore defaults)
+python3 -m orchestrator topologies/grid_10x10.json --rf-model airtime
+
+# 10×10 grid with full RF contention (airtime + collision detection)
+python3 -m orchestrator topologies/grid_10x10.json --rf-model contention
 ```
+
+### RF physical-layer model
+
+The `--rf-model` flag activates progressively realistic LoRa channel simulation.
+The topology must include a `radio` section (all topologies produced by
+`tools/fetch_topology.py` and `topologies/grid_10x10.json` already do).
+
+| Mode | Behaviour |
+|------|-----------|
+| `none` | Instant delivery (default). All existing behaviour preserved. |
+| `airtime` | Each delivery is delayed by the LoRa on-air time (computed from SF, BW, CR, and payload length using the Semtech AN1200.13 formula) plus the link's `latency_ms` propagation delay. |
+| `contention` | Airtime delays plus collision detection. When two nodes that share a receiver both transmit while their airtime windows overlap, the packets collide and are lost. The **LoRa capture effect** is applied when node positions are available: if one transmitter's signal is at least 6 dB stronger than the other's (log-distance path-loss model, exponent 3.0), the stronger packet survives. |
+
+The `radio` section of the topology JSON specifies the shared LoRa parameters:
+
+```json
+"radio": {
+  "sf": 10,
+  "bw_hz": 250000,
+  "cr": 1,
+  "preamble_symbols": 8
+}
+```
+
+`cr` is the coding-rate offset (1 = CR4/5, 2 = CR4/6, 3 = CR4/7, 4 = CR4/8).
+These defaults match the MeshCore source (`simple_repeater/MyMesh.cpp`).
+At SF10/BW250, a typical 40-byte packet has an on-air time of roughly 330 ms.
 
 ### Metrics report
 
@@ -300,6 +340,7 @@ At the end of every run the orchestrator prints a report to stdout:
   Latency (send→recv): min=21ms  avg=21ms  max=22ms
 
   Link-level packet loss:  0
+  RF collisions dropped:   0
   Adversarial drops:       0
   Adversarial corruptions: 0
   Adversarial replays:     0
@@ -506,6 +547,23 @@ reach `deep_valley` at all.
 | `epoch` | int | `0` | Unix epoch sent to nodes on startup; `0` means use the real wall clock |
 | `default_binary` | string | `./node_agent/build/node_agent` | Default path to the node binary; individual nodes may override with a `binary` field |
 | `seed` | int | — | RNG seed; omit for non-deterministic behaviour |
+
+### `radio`
+
+An optional object that specifies LoRa physical-layer parameters.  Required
+when using `--rf-model airtime` or `--rf-model contention`; silently ignored
+with `--rf-model none` (the default).
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `sf` | int | `10` | Spreading factor (7–12) |
+| `bw_hz` | int | `250000` | Bandwidth in Hz |
+| `cr` | int | `1` | Coding-rate offset: 1=CR4/5, 2=CR4/6, 3=CR4/7, 4=CR4/8 |
+| `preamble_symbols` | int | `8` | Number of preamble symbols |
+
+Defaults match the MeshCore source (`simple_repeater/MyMesh.cpp`).
+`topologies/grid_10x10.json` and all topologies produced by
+`tools/fetch_topology.py` include a `radio` section with these defaults.
 
 ### Adversarial nodes
 
@@ -819,8 +877,15 @@ When a node emits a `tx` event the `PacketRouter` creates one
    packet if it loses.
 2. If the **receiving** node is adversarial, applies the adversarial filter
    (drop / corrupt / replay).
-3. Sleeps for `latency_ms / 1000` seconds (`asyncio.sleep` — non-blocking).
-4. Calls `deliver_rx` on the receiving `NodeAgent`, which writes an `rx`
+3. Sleeps until delivery time.  With `--rf-model none` this is just
+   `latency_ms / 1000` seconds.  With `--rf-model airtime` or `contention`
+   the sleep extends to `tx_end + latency_ms/1000 - now`, where `tx_end =
+   tx_start + airtime_ms / 1000` and `airtime_ms` is computed from the LoRa
+   parameters (SF, BW, CR, payload length) via the Semtech AN1200.13 formula.
+4. *(contention model only)* Checks whether a collision occurred: if another
+   node whose transmissions reach this receiver had an overlapping airtime
+   window, the packet is lost (unless the capture effect applies).
+5. Calls `deliver_rx` on the receiving `NodeAgent`, which writes an `rx`
    command to the node's stdin.
 
 Because each delivery is an independent asyncio task, many packets can be

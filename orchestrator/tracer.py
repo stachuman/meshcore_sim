@@ -46,13 +46,23 @@ class HopRecord:
 
 
 @dataclass
+class CollisionRecord:
+    """One RF collision event: a delivery blocked by simultaneous interference."""
+    t: float               # asyncio event-loop time when collision was detected
+    sender: str            # node that transmitted
+    receiver: str          # intended receiver that did not get the packet
+    tx_id: Optional[int]   # same tx_id as the corresponding record_tx() call
+
+
+@dataclass
 class PacketTrace:
     """Everything we know about one logical packet (identified by fingerprint)."""
     fingerprint:    str          # stable correlation key
     payload_type:   int
     first_seen_at:  float        # loop time of first record_tx() call
     first_sender:   str          # node that first transmitted this packet
-    hops:           list[HopRecord] = field(default_factory=list)
+    hops:           list[HopRecord]       = field(default_factory=list)
+    collisions:     list[CollisionRecord] = field(default_factory=list)
 
     @property
     def witness_count(self) -> int:
@@ -130,6 +140,42 @@ class PacketTracer:
         self._tx_airtime[self._tx_counter] = airtime_ms
         return self._tx_counter
 
+    def record_collision(
+        self,
+        sender: str,
+        receiver: str,
+        hex_data: str,
+        t: float,
+        tx_id: Optional[int] = None,
+    ) -> None:
+        """
+        Register an RF collision: a delivery was blocked because another
+        transmission overlapped at the receiver.  Called from
+        PacketRouter._deliver_to after the collision check fires.
+
+        tx_id should be the value returned by the corresponding record_tx() call.
+        """
+        info = decode_packet(hex_data)
+        if info is None:
+            return
+        fp = packet_fingerprint(info)
+        trace = self._traces.get(fp)
+        if trace is None:
+            # record_tx should always precede this call; create defensively.
+            trace = PacketTrace(
+                fingerprint=fp,
+                payload_type=info.payload_type,
+                first_seen_at=t,
+                first_sender=sender,
+            )
+            self._traces[fp] = trace
+        trace.collisions.append(CollisionRecord(
+            t=t,
+            sender=sender,
+            receiver=receiver,
+            tx_id=tx_id,
+        ))
+
     def record_rx(
         self,
         sender: str,
@@ -206,9 +252,9 @@ class PacketTracer:
           node_names    — list of node names in the simulation; stored so the
                           visualiser can cross-check node identity.
 
-        Schema (version 1):
+        Schema (version 2):
           {
-            "schema_version": 1,
+            "schema_version": 2,
             "topology": "<basename>.json",   # if topology_path provided
             "nodes": ["name", ...],           # if node_names provided
             "packets": [
@@ -224,7 +270,12 @@ class PacketTracer:
                 "unique_receivers": [str, ...],
                 "hops": [
                   {"t": float, "sender": str, "receiver": str,
-                   "route_type": int, "path_count": int},
+                   "route_type": int, "path_count": int,
+                   "tx_id": int|null, "airtime_ms": float},
+                  ...
+                ],
+                "collisions": [
+                  {"t": float, "sender": str, "receiver": str, "tx_id": int|null},
                   ...
                 ]
               },
@@ -256,10 +307,19 @@ class PacketTracer:
                     }
                     for h in tr.hops
                 ],
+                "collisions": [
+                    {
+                        "t":        c.t,
+                        "sender":   c.sender,
+                        "receiver": c.receiver,
+                        "tx_id":    c.tx_id,
+                    }
+                    for c in tr.collisions
+                ],
             })
         # Sort by first_seen_at so the file reads chronologically
         packets.sort(key=lambda p: p["first_seen_at"])
-        result: dict = {"schema_version": 1}
+        result: dict = {"schema_version": 2}
         if topology_path is not None:
             result["topology"] = Path(topology_path).name
         if node_names is not None:

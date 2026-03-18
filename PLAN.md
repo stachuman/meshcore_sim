@@ -50,7 +50,7 @@ Success criteria:
 | `PacketTracer` — per-packet path & witness analysis | ✅ complete |
 | `packet.py` — pure-Python MeshCore wire-format decoder | ✅ complete |
 | C++ unit tests (crypto shims, packet serialisation) | ✅ complete |
-| Python unit / integration tests (313 tests, all passing) | ✅ complete |
+| Python unit / integration tests (345 tests, all passing) | ✅ complete |
 | Example topologies (linear, star, adversarial, asymmetric hill) | ✅ complete |
 | Grid topology generator (`topologies/gen_grid.py`) | ✅ complete |
 | Pre-generated 10×10 grid topology (`topologies/grid_10x10.json`) | ✅ complete |
@@ -74,6 +74,13 @@ Success criteria:
 | `tracer.to_dict()` — embeds `topology` (filename) and `nodes` list for cross-checking in viz | ✅ complete |
 | `HopRecord.tx_id` — monotonic counter groups all deliveries from the same broadcast; `to_dict()` emits it | ✅ complete |
 | `viz/` — Phase 4 broadcast-aware hop display: hop slider steps through broadcast events (one sender → N receivers per step) | ✅ complete |
+| `viz/` — per-packet witness map toggle (global heatmap vs. per-packet binary coloring); progressive witness reveal in hop-animate mode | ✅ complete |
+| `orchestrator/airtime.py` — LoRa on-air time formula (Semtech AN1200.13); SF/BW/CR/preamble parameterised | ✅ complete |
+| `orchestrator/channel.py` — RF contention model: hard collision + LoRa capture effect (log-distance path-loss); `ChannelModel` class | ✅ complete |
+| `--rf-model none\|airtime\|contention` CLI flag; `radio` topology section; `RadioConfig` dataclass with MeshCore defaults (SF10/BW250/CR4-5) | ✅ complete |
+| `topologies/grid_10x10.json` — corrected `radio` section to SF10/BW250/CR4-5 (matches MeshCore source) | ✅ complete |
+| `tools/fetch_topology.py` — always emits `radio` section; `--sf`, `--bw-hz`, `--cr` CLI flags for override | ✅ complete |
+| `EXAMPLES.md` — catalogue of 14 worked simulation scenarios with exact commands and expected output | ✅ complete |
 
 ### Key invariants
 
@@ -325,53 +332,60 @@ Work items:
   Highlight the sender in orange and all receivers in that group in green
   simultaneously, giving an accurate picture of the broadcast event.~~  ✅ done
 
-### 6. RF physical layer fidelity  [FUTURE — low priority]
+### 6. RF physical layer fidelity  [✅ DONE]
 
-#### 6a. Airtime modelling
+#### 6a. Airtime modelling  [✅ DONE]
 
-The simulator currently records delivery timestamps as `TX_start + latency_ms`,
-omitting the over-the-air transmission duration (airtime).  For typical MeshCore
-packets at SF9/BW125, airtime is roughly 200–500 ms — comparable to or larger
-than the configured propagation delay.
+`orchestrator/airtime.py` — `lora_airtime_ms(sf, bw_hz, cr, payload_bytes,
+preamble_symbols, crc, explicit_header)` implements the full Semtech AN1200.13
+formula, including the low-data-rate optimisation (LDR enabled automatically
+when `t_sym >= 16 ms`, i.e. SF11/SF12 at BW125).
 
-Work items:
-- Add an optional `airtime_ms` field to topology edges (or derive it from a
-  `spreading_factor` / `bandwidth_khz` / `coding_rate` / `packet_bytes` model).
-- Record `tx_start` and `tx_end = tx_start + airtime_ms` on `HopRecord` in the
-  tracer; expose both in the trace JSON.
-- Update the visualiser hop-info panel to show `tx_start`→`tx_end` timing
-  rather than a single delivery timestamp.
-- Adjust the privacy baseline tests that inspect `h["t"]` if the schema changes.
+`--rf-model airtime`: each packet delivery is delayed by
+`tx_end + latency_ms/1000 - now`, where `tx_end = tx_start + airtime_ms/1000`.
+The tracer stores `airtime_ms` on each `HopRecord` and emits it in trace JSON.
 
-Privacy-research relevance: a timing-correlation adversary that observes
-multiple nodes' receive timestamps can distinguish "one broadcast overheard by N
-nodes" (all arrive within `airtime_ms` of each other) from "N independent
-transmissions" (spread over many seconds).  Without airtime, the simulator
-cannot model this attack class.
+At the MeshCore defaults (SF10 / BW250 kHz), a 40-byte packet takes ~330 ms
+on-air — comparable to multi-hop propagation delays in dense topologies.
 
-#### 6b. RF contention / channel occupancy
+#### 6b. RF contention / channel occupancy  [✅ DONE]
 
-Real LoRa operates on a shared channel.  When two nodes transmit simultaneously
-on the same channel, both packets are lost at any receiver that hears both
-(capture effect aside).  The simulator currently fires all delivery tasks
-concurrently with no contention model.
+`orchestrator/channel.py` — `ChannelModel` tracks active TX windows.
+`--rf-model contention`: two transmissions that overlap in time AND both reach
+the same receiver cause a collision; both packets are dropped.
 
-Work items:
-- Add a per-channel (frequency + SF) occupancy tracker to the router.
-- When a new `tx` event begins while the channel is already occupied by an
-  overlapping transmission heard by the same receiver, mark the delivery as a
-  collision loss (separate from link-level `loss` probability).
-- Expose `collision_count` in the metrics report alongside `link_loss_count`.
-- Consider the capture effect: the stronger signal wins if the power difference
-  exceeds a threshold (e.g., 6 dB); parameterise this as a topology-level
-  `capture_threshold_db` field.
+**LoRa capture effect** (when `lat`/`lon` are present on all nodes): if the
+primary signal is ≥ 6 dB stronger than the interferer (log-distance path-loss
+model, exponent 3.0), the primary packet survives.  Without position data,
+every overlap is treated as a hard collision.
 
-Privacy-research relevance: channel contention creates correlated loss bursts
-that a passive adversary can exploit.  A flood from node A that silences the
-channel for 400 ms gives a timing fingerprint that can identify A even if the
-payload is opaque.  Conversely, a privacy protocol that intentionally fragments
-transmissions to reduce airtime per burst improves both throughput and
-traffic-analysis resistance.
+`metrics.py` exposes `collision_count`; the report prints
+`RF collisions dropped: N` alongside `Link-level packet loss: N`.
+
+`sim_tests/test_airtime.py` — 19 tests covering the airtime formula spot-checks
+(verified against Semtech calculator), hard collision detection, non-overlap
+cases, interferer reachability, window expiry, and capture-effect outcomes.
+
+#### 6c. Collision visibility in trace and viz  [✅ DONE]
+
+`CollisionRecord` dataclass added to `tracer.py` (parallel to `HopRecord`).
+`PacketTrace.collisions` list accumulates all RF collision events for a packet.
+`PacketTracer.record_collision(sender, receiver, hex_data, t, tx_id)` records
+a failed delivery; `PacketRouter._deliver_to` calls it immediately before the
+collision-check `return`.  `to_dict()` emits `"collisions"` alongside `"hops"`
+in every packet object; schema bumped to version 2.
+
+Viz changes:
+- **Geo map**: red line overlay on collided edges (stepped with the hop slider,
+  all shown when step_idx = −1).  Always emitted as an empty trace when there
+  are no collisions, preserving `uirevision` trace count for pan/zoom stability.
+- **Cytoscape**: dashed red edge stylesheet entries for collided pairs.
+- **Packet info panel**: `Collisions: N` in red when N > 0.
+- **Broadcast-step panel**: `Collisions: N` in red for the current tx_id step.
+- **Sidebar legend**: `━ collision` swatch added alongside sender/receiver/witnessed.
+
+12 new tests in `test_tracer.py` covering `CollisionRecord`, `record_collision`,
+defensive handling, `to_dict` schema v2, and independence from `witness_count`.
 
 ### 7. Adversarial test framework
 
@@ -406,6 +420,9 @@ by `unique_receivers` to see which adversarial nodes saw which packets.
 | Date | Change |
 |------|--------|
 | 2026-03-16 | `tools/README.md` — full auth guide and CLI reference for scraper; FD-limit fix for large topologies |
+| 2026-03-17 | RF physical-layer model: `--rf-model airtime\|contention`; `airtime.py` (Semtech AN1200.13); `channel.py` (hard collision + capture effect); `RadioConfig` defaults corrected to SF10/BW250/CR4-5; `grid_10x10.json` updated; `fetch_topology.py` gains `--sf/--bw-hz/--cr` and always emits `radio` section; 19 new tests |
+| 2026-03-17 | `EXAMPLES.md` — 14 worked simulation scenarios covering all topology types, RF models, collision viz, live network import, room server demo, and report comparison |
+| 2026-03-17 | `viz/` — per-packet witness map toggle; progressive witness reveal in hop-animate mode; fixed global heatmap overlay; default to per-packet + animate-hops |
 | 2026-03-17 | `viz/` — Phase 4: hop slider now steps through broadcast events (one sender → N receivers); uses `tx_id` grouping |
 | 2026-03-17 | `tracer` — `HopRecord.tx_id`: monotonic counter groups all deliveries from the same broadcast event; emitted in trace JSON |
 | 2026-03-17 | `viz/` — hop-by-hop step-through slider; Play/Pause drives hop animation; "animate hops" checkbox; trace mismatch validation; trace JSON now embeds topology name + node list |

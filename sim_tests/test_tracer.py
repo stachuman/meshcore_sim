@@ -16,7 +16,7 @@ from orchestrator.packet import (
     ROUTE_TYPE_DIRECT,
     ROUTE_TYPE_FLOOD,
 )
-from orchestrator.tracer import PacketTracer
+from orchestrator.tracer import CollisionRecord, PacketTracer
 
 
 # ---------------------------------------------------------------------------
@@ -281,6 +281,94 @@ class TestPacketTracerReport(unittest.TestCase):
         report = tracer.report()
         self.assertIn("witnesses", report)
         self.assertIn("alice", report)
+
+
+class TestPacketTracerCollisions(unittest.TestCase):
+
+    def setUp(self):
+        self.tracer = PacketTracer()
+
+    def test_no_collisions_by_default(self):
+        self.tracer.record_tx("alice", _MSG_HOP0, 0.0)
+        tr = list(self.tracer.traces.values())[0]
+        self.assertEqual(tr.collisions, [])
+
+    def test_record_collision_adds_collision_record(self):
+        tx_id = self.tracer.record_tx("alice", _MSG_HOP0, 0.0)
+        self.tracer.record_collision("alice", "relay1", _MSG_HOP0, 0.05, tx_id)
+        tr = list(self.tracer.traces.values())[0]
+        self.assertEqual(len(tr.collisions), 1)
+        c = tr.collisions[0]
+        self.assertEqual(c.sender, "alice")
+        self.assertEqual(c.receiver, "relay1")
+        self.assertEqual(c.tx_id, tx_id)
+        self.assertAlmostEqual(c.t, 0.05)
+
+    def test_collision_is_instance_of_collision_record(self):
+        tx_id = self.tracer.record_tx("alice", _MSG_HOP0, 0.0)
+        self.tracer.record_collision("alice", "relay1", _MSG_HOP0, 0.05, tx_id)
+        tr = list(self.tracer.traces.values())[0]
+        self.assertIsInstance(tr.collisions[0], CollisionRecord)
+
+    def test_multiple_collisions_same_packet(self):
+        tx_id = self.tracer.record_tx("alice", _MSG_HOP0, 0.0)
+        self.tracer.record_collision("alice", "relay1", _MSG_HOP0, 0.05, tx_id)
+        self.tracer.record_collision("alice", "relay2", _MSG_HOP0, 0.06, tx_id)
+        tr = list(self.tracer.traces.values())[0]
+        self.assertEqual(len(tr.collisions), 2)
+
+    def test_collision_with_no_prior_tx_creates_trace_defensively(self):
+        """record_collision before record_tx should not crash."""
+        self.tracer.record_collision("alice", "relay1", _MSG_HOP0, 0.05)
+        self.assertEqual(len(self.tracer.traces), 1)
+        tr = list(self.tracer.traces.values())[0]
+        self.assertEqual(len(tr.collisions), 1)
+
+    def test_collision_invalid_hex_does_not_crash(self):
+        self.tracer.record_collision("alice", "relay1", "ZZZZ", 0.05)
+        self.assertEqual(len(self.tracer.traces), 0)
+
+    def test_collision_does_not_affect_witness_count(self):
+        """A collision is a failed delivery — should not increment witness_count."""
+        tx_id = self.tracer.record_tx("alice", _MSG_HOP0, 0.0)
+        self.tracer.record_rx("alice", "relay1", _MSG_HOP0, 0.02, tx_id)
+        self.tracer.record_collision("alice", "relay2", _MSG_HOP0, 0.02, tx_id)
+        tr = list(self.tracer.traces.values())[0]
+        self.assertEqual(tr.witness_count, 1)   # only relay1 actually received it
+
+    def test_collision_is_separate_from_hops(self):
+        tx_id = self.tracer.record_tx("alice", _MSG_HOP0, 0.0)
+        self.tracer.record_rx("alice", "relay1", _MSG_HOP0, 0.02, tx_id)
+        self.tracer.record_collision("alice", "relay2", _MSG_HOP0, 0.02, tx_id)
+        tr = list(self.tracer.traces.values())[0]
+        self.assertEqual(len(tr.hops), 1)
+        self.assertEqual(len(tr.collisions), 1)
+
+    def test_to_dict_includes_collisions_key(self):
+        tx_id = self.tracer.record_tx("alice", _MSG_HOP0, 0.0)
+        self.tracer.record_collision("alice", "relay1", _MSG_HOP0, 0.05, tx_id)
+        d = self.tracer.to_dict()
+        pkt = d["packets"][0]
+        self.assertIn("collisions", pkt)
+
+    def test_to_dict_collision_fields(self):
+        tx_id = self.tracer.record_tx("alice", _MSG_HOP0, 0.0)
+        self.tracer.record_collision("alice", "relay1", _MSG_HOP0, 0.05, tx_id)
+        d = self.tracer.to_dict()
+        c = d["packets"][0]["collisions"][0]
+        self.assertEqual(c["sender"],   "alice")
+        self.assertEqual(c["receiver"], "relay1")
+        self.assertEqual(c["tx_id"],    tx_id)
+        self.assertAlmostEqual(c["t"],  0.05)
+
+    def test_to_dict_schema_version_2(self):
+        d = self.tracer.to_dict()
+        self.assertEqual(d["schema_version"], 2)
+
+    def test_to_dict_empty_collisions_list_when_none(self):
+        self.tracer.record_tx("alice", _MSG_HOP0, 0.0)
+        d = self.tracer.to_dict()
+        self.assertEqual(d["packets"][0]["collisions"], [])
 
 
 if __name__ == "__main__":

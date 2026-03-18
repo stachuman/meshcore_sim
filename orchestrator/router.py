@@ -172,6 +172,11 @@ class PacketRouter:
                                      tx_start, tx_end, tx_id):
                 self._metrics.record_collision(sender, receiver_name)
                 log.debug("[router] collision %s→%s", sender, receiver_name)
+                if self._tracer is not None:
+                    t_col = asyncio.get_event_loop().time()
+                    self._tracer.record_collision(
+                        sender, receiver_name, hex_data, t_col, tx_id
+                    )
                 return
 
         # 5. Record successful delivery in the path tracer

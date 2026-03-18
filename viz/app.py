@@ -44,9 +44,10 @@ _ROLE_COLOUR: dict[str, str] = {
 }
 _EDGE_COLOUR     = "#adb5bd"
 _EDGE_COLOUR_GEO = "rgba(173,181,189,0.6)"
-_SENDER_COLOUR   = "#f77f00"   # orange — active packet senders
-_RECEIVER_COLOUR = "#2dc653"   # green  — active packet receivers (current step)
-_RECEIVED_COLOUR = "#74b3ce"   # soft blue  — received this packet (other steps)
+_SENDER_COLOUR    = "#f77f00"   # orange — active packet senders
+_RECEIVER_COLOUR  = "#2dc653"   # green  — active packet receivers (current step)
+_RECEIVED_COLOUR  = "#74b3ce"   # soft blue  — received this packet (other steps)
+_COLLISION_COLOUR = "#e63946"   # red — RF collision (delivery blocked)
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -117,6 +118,7 @@ def _geo_figure(
     packet_witnesses: Optional[set] = None,
     highlight_senders: Optional[list[str]] = None,
     highlight_receivers: Optional[list[str]] = None,
+    collision_edges: Optional[list[tuple[str, str]]] = None,
 ) -> go.Figure:
     node_by_name = {n["name"]: n for n in nodes}
 
@@ -136,6 +138,26 @@ def _geo_figure(
         lon=edge_lons,
         mode="lines",
         line=dict(width=1, color=_EDGE_COLOUR_GEO),
+        hoverinfo="none",
+        showlegend=False,
+    )
+
+    # --- collision edge overlay (always emitted; empty when no collisions) ---
+    # Always present keeps trace count constant, preserving uirevision pan/zoom.
+    col_lats: list[Any] = []
+    col_lons: list[Any] = []
+    for ca, cb in (collision_edges or []):
+        na = node_by_name.get(ca)
+        nb = node_by_name.get(cb)
+        if na is None or nb is None:
+            continue
+        col_lats += [float(na["lat"]), float(nb["lat"]), None]
+        col_lons += [float(na["lon"]), float(nb["lon"]), None]
+    collision_trace = go.Scattermapbox(
+        lat=col_lats,
+        lon=col_lons,
+        mode="lines",
+        line=dict(width=3, color=_COLLISION_COLOUR),
         hoverinfo="none",
         showlegend=False,
     )
@@ -252,7 +274,7 @@ def _geo_figure(
     centre_lat = sum(float(n["lat"]) for n in nodes) / len(nodes)
     centre_lon = sum(float(n["lon"]) for n in nodes) / len(nodes)
 
-    fig = go.Figure(data=[edge_trace] + node_traces + highlight_traces)
+    fig = go.Figure(data=[edge_trace, collision_trace] + node_traces + highlight_traces)
     fig.update_layout(
         mapbox=dict(
             style="open-street-map",
@@ -354,7 +376,8 @@ _CYTO_STYLESHEET = [
 
 def _packet_info_children(pkt: dict, idx: int, total: int) -> list:
     route = "FLOOD" if pkt["is_flood"] else "DIRECT"
-    return [
+    n_collisions = len(pkt.get("collisions", []))
+    children = [
         html.Div(
             f"Packet {idx + 1} / {total}",
             style={"fontWeight": "600", "marginBottom": "4px"},
@@ -367,6 +390,12 @@ def _packet_info_children(pkt: dict, idx: int, total: int) -> list:
             title=pkt["first_sender"],
         ),
     ]
+    if n_collisions > 0:
+        children.append(html.Div(
+            f"Collisions: {n_collisions}",
+            style={"color": _COLLISION_COLOUR},
+        ))
+    return children
 
 
 # ── Hop / broadcast-step helpers (Phase 2) ───────────────────────────────────
@@ -414,6 +443,30 @@ def _accumulated_witnesses(
     return witnesses
 
 
+def _collision_edges_for_step(
+    pkt: dict, step_idx: int, steps: list[list[dict]]
+) -> list[tuple[str, str]]:
+    """
+    Return (sender, receiver) pairs for RF collisions at the given step.
+
+    step_idx == -1  → all collisions for this packet.
+    step_idx >= 0   → only collisions whose tx_id matches steps[step_idx].
+    """
+    all_collisions = pkt.get("collisions", [])
+    if not all_collisions:
+        return []
+    if step_idx < 0 or not steps or step_idx >= len(steps):
+        return [(c["sender"], c["receiver"]) for c in all_collisions]
+    step_tx_id = steps[step_idx][0].get("tx_id")
+    if step_tx_id is None:
+        return []
+    return [
+        (c["sender"], c["receiver"])
+        for c in all_collisions
+        if c.get("tx_id") == step_tx_id
+    ]
+
+
 def _step_info_children(
     pkt: dict, step_idx: int, steps: list[list[dict]]
 ) -> list:
@@ -432,7 +485,12 @@ def _step_info_children(
     dt        = step[0]["t"] - pkt["first_seen_at"]
     route     = _route_name(step[0]["route_type"])
     rx_short  = ", ".join(_short(r) for r in receivers)
-    return [
+    step_tx_id = step[0].get("tx_id")
+    n_collisions = sum(
+        1 for c in pkt.get("collisions", [])
+        if c.get("tx_id") == step_tx_id
+    )
+    children = [
         html.Div(
             f"Broadcast {step_idx + 1} / {n_steps}",
             style={"fontWeight": "600", "marginBottom": "2px"},
@@ -449,6 +507,12 @@ def _step_info_children(
         html.Div(f"Route: {route}"),
         html.Div(f"t+{dt:.3f}s  paths: {step[0]['path_count']}"),
     ]
+    if n_collisions > 0:
+        children.append(html.Div(
+            f"Collisions: {n_collisions}",
+            style={"color": _COLLISION_COLOUR, "fontSize": "11px"},
+        ))
+    return children
 
 
 # ── Sidebar ───────────────────────────────────────────────────────────────────
@@ -659,9 +723,10 @@ def _sidebar(
             ),
             html.Div(
                 [
-                    html.Span("■ sender  ",  style={"color": _SENDER_COLOUR,   "fontSize": "11px"}),
-                    html.Span("■ receiver ", style={"color": _RECEIVER_COLOUR, "fontSize": "11px"}),
-                    html.Span("■ witnessed", style={"color": _RECEIVED_COLOUR, "fontSize": "11px"}),
+                    html.Span("■ sender  ",  style={"color": _SENDER_COLOUR,    "fontSize": "11px"}),
+                    html.Span("■ receiver ", style={"color": _RECEIVER_COLOUR,  "fontSize": "11px"}),
+                    html.Span("■ witnessed", style={"color": _RECEIVED_COLOUR,  "fontSize": "11px"}),
+                    html.Span(" ━ collision", style={"color": _COLLISION_COLOUR, "fontSize": "11px"}),
                 ],
                 style={"marginBottom": "6px"},
             ),
@@ -859,6 +924,7 @@ def create_app(
                     packet_witnesses=pkt_witnesses,
                     highlight_senders=senders,
                     highlight_receivers=receivers,
+                    collision_edges=_collision_edges_for_step(pkt, step_idx, steps),
                 )
                 return (
                     fig,
@@ -916,6 +982,18 @@ def create_app(
                         "selector": f'node[id = "{r}"]',
                         "style": {"background-color": _RECEIVER_COLOUR},
                     })
+                # Collision edges: dashed red.  Try both directions since the
+                # element may be stored as A→B or B→A in the cytoscape graph.
+                for ca, cb in _collision_edges_for_step(pkt, step_idx, steps):
+                    for src, tgt in [(ca, cb), (cb, ca)]:
+                        stylesheet.append({
+                            "selector": f'edge[source="{src}"][target="{tgt}"]',
+                            "style": {
+                                "line-color":  _COLLISION_COLOUR,
+                                "width":       2,
+                                "line-style":  "dashed",
+                            },
+                        })
                 return (
                     stylesheet,
                     _packet_info_children(pkt, idx, len(packets)),
