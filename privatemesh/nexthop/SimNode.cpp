@@ -245,15 +245,21 @@ void SimNode::emitJson(const char* json) const {
 
 // Strategy C: metric-horizon flood suppression.
 //
-// Standard behaviour (empty table): relay all flood packets (_is_relay).
+// SCOPE: applied only to encrypted DATA packets (TXT_MSG, REQ, RESPONSE, …).
+// Control and discovery packets — ADVERT, PATH, ACK — are ALWAYS relayed
+// unconditionally so the contact list and routing table are built correctly
+// during the warm-up period.  Applying the horizon check to adverts would
+// suppress the flood that populates the table, leaving every node's horizon
+// frozen at 1-2 hops and causing all subsequent message floods to be killed
+// after a handful of relays.
 //
-// With a populated routing table: only retransmit a flood packet if the
-// packet has not yet exceeded this node's "routing horizon" — defined as the
-// maximum metric of any useful (path_bytes > 0) entry in the table.
+// With a populated routing table: only retransmit a data flood if the packet
+// has not yet exceeded this node's "routing horizon" — defined as the maximum
+// metric of any useful (path_bytes > 0) entry in the table.
 //
-// Rationale: nodes whose every known destination is closer than the packet
-// has already traveled are "behind" the wave front and add no new coverage by
-// retransmitting.  Suppressing them reduces total airtime while preserving
+// Rationale: a relay whose every known destination is closer than the packet
+// has already traveled is "behind" the wave front and adds no new coverage by
+// retransmitting.  Suppressing it reduces total airtime while preserving
 // delivery to all destinations within the routing horizon.
 //
 // Note: this operates without knowledge of the (encrypted) packet destination;
@@ -261,6 +267,18 @@ void SimNode::emitJson(const char* json) const {
 // knowledge is surpassed by the packet's current hop count.
 bool SimNode::allowPacketForward(const mesh::Packet* packet) {
     if (!_is_relay) return false;
+
+    // Only apply horizon suppression to encrypted data payloads.
+    // Discovery/control types must propagate freely.
+    uint8_t ptype = packet->getPayloadType();
+    bool is_data = (ptype == PAYLOAD_TYPE_TXT_MSG
+                 || ptype == PAYLOAD_TYPE_REQ
+                 || ptype == PAYLOAD_TYPE_RESPONSE
+                 || ptype == PAYLOAD_TYPE_GRP_TXT
+                 || ptype == PAYLOAD_TYPE_GRP_DATA
+                 || ptype == PAYLOAD_TYPE_ANON_REQ);
+    if (!is_data) return true;
+
     if (rt_count == 0) return true;  // no table data: behave like standard relay
 
     uint8_t hops    = packet->getPathHashCount();

@@ -55,8 +55,15 @@ A relay whose entire routing knowledge has been surpassed by the flood wave gain
 nothing by re-broadcasting; it is suppressed (`return hops < horizon`).  Relays
 with no useful table data relay unconditionally, matching standard behaviour.
 
-This operates without decrypting or even reading the packet destination and is
-therefore compatible with encrypted payloads.
+**Scope — data packets only.** This suppression is applied **only** to encrypted
+data payloads (`TXT_MSG`, `REQ`, `RESPONSE`, `GRP_TXT`, `GRP_DATA`, `ANON_REQ`).
+Control and discovery packets (`ADVERT`, `PATH`, `ACK`) are always relayed
+unconditionally.  Applying the horizon check to advertisements would suppress the
+very flood that populates the routing table, leaving every node's horizon frozen at
+1–2 hops and causing all subsequent message floods to die after a handful of relays.
+
+This operates without decrypting or reading the packet destination and is therefore
+compatible with encrypted payloads.
 
 ### 4. Bidirectional path exchange fix (`onPeerDataRecv`)
 
