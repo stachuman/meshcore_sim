@@ -43,6 +43,8 @@ class HopRecord:
     tx_id: Optional[int]   # monotonic counter, one per TX event;
                            # all hops sharing a tx_id came from the same broadcast
     airtime_ms: float = 0.0  # on-air time of the TX event (0 when not modelled)
+    size_bytes: int = 0    # wire-format byte length of the packet at this hop
+                           # (flood packets grow as relays append their hashes)
 
 
 @dataclass
@@ -76,6 +78,17 @@ class PacketTrace:
     @property
     def unique_receivers(self) -> set[str]:
         return {h.receiver for h in self.hops}
+
+    @property
+    def avg_size_bytes(self) -> float:
+        """
+        Mean wire-format packet size in bytes across all hops.
+
+        For flood packets this grows as relays append relay hashes; for direct
+        packets it is constant.  Returns 0.0 if no hops have been recorded yet.
+        """
+        sizes = [h.size_bytes for h in self.hops if h.size_bytes > 0]
+        return sum(sizes) / len(sizes) if sizes else 0.0
 
     def is_flood(self) -> bool:
         return any(
@@ -215,6 +228,7 @@ class PacketTracer:
             path_count=info.path_count,
             tx_id=tx_id,
             airtime_ms=airtime_ms,
+            size_bytes=len(hex_data) // 2,
         ))
 
     # ------------------------------------------------------------------
@@ -295,6 +309,7 @@ class PacketTracer:
                 "witness_count":     tr.witness_count,
                 "unique_senders":    sorted(tr.unique_senders),
                 "unique_receivers":  sorted(tr.unique_receivers),
+                "avg_size_bytes":     tr.avg_size_bytes,
                 "hops": [
                     {
                         "t":           h.t,
@@ -304,6 +319,7 @@ class PacketTracer:
                         "path_count":  h.path_count,
                         "tx_id":       h.tx_id,
                         "airtime_ms":  h.airtime_ms,
+                        "size_bytes":  h.size_bytes,
                     }
                     for h in tr.hops
                 ],

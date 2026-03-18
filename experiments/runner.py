@@ -116,6 +116,24 @@ class SimResult:
         return self.metrics.avg_latency_ms
 
     @property
+    def avg_packet_size_bytes(self) -> float:
+        """
+        Mean wire-format size (bytes) of TXT_MSG packets across all hops.
+
+        Flood packets grow as relays append relay hashes, so this captures both
+        the payload size and the path-overhead accumulated in transit.  Direct
+        packets have a fixed size (path is pre-specified by the sender).
+        Returns 0.0 if no TXT_MSG hops were recorded.
+        """
+        all_sizes = [
+            h.size_bytes
+            for t in self.txt_traces
+            for h in t.hops
+            if h.size_bytes > 0
+        ]
+        return sum(all_sizes) / len(all_sizes) if all_sizes else 0.0
+
+    @property
     def total_hops(self) -> int:
         """Total hop records across all packet traces."""
         return sum(len(t.hops) for t in self.tracer.traces.values())

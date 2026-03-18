@@ -49,7 +49,7 @@ class ComparisonTable:
         # Header.
         h = (f"  {'Variant':<{label_w}}  {'Delivery':>8}  {'Avg witness':>11}"
              f"  {'Flood wc':>8}  {'Direct wc':>9}  {'Latency ms':>10}"
-             f"  {'Hops':>6}  {'Collisions':>10}  {'Time s':>7}")
+             f"  {'Pkt bytes':>9}  {'Hops':>6}  {'Collisions':>10}  {'Time s':>7}")
         lines.append("")
         lines.append(h)
         lines.append("  " + "-" * (len(h) - 2))
@@ -60,13 +60,14 @@ class ComparisonTable:
             flood_wc = str(r.flood_witness_count)
             dir_wc   = str(r.direct_witness_count)
             lat      = f"{r.avg_latency_ms:.0f}"
+            pkt_sz   = f"{r.avg_packet_size_bytes:.1f}"
             hops     = str(r.total_hops)
             coll     = str(r.collision_count)
             elapsed  = f"{r.elapsed_s:.1f}"
             lines.append(
                 f"  {r.label:<{label_w}}  {delivery:>8}  {avg_wc:>11}"
                 f"  {flood_wc:>8}  {dir_wc:>9}  {lat:>10}"
-                f"  {hops:>6}  {coll:>10}  {elapsed:>7}"
+                f"  {pkt_sz:>9}  {hops:>6}  {coll:>10}  {elapsed:>7}"
             )
 
         # Reduction ratios (only when exactly 2 results and same scenario).
@@ -80,6 +81,8 @@ class ComparisonTable:
                    lines=lines)
             _ratio("  Flood→direct witness reduction", a.flood_witness_count,
                    b.flood_witness_count, lines=lines)
+            _delta("  Avg TXT packet size (bytes)", a.avg_packet_size_bytes,
+                   b.avg_packet_size_bytes, lines=lines)
             _delta("  Total hops", a.total_hops, b.total_hops, lines=lines)
 
         lines.append(sep)
@@ -97,8 +100,9 @@ class ComparisonTable:
                     "avg_witness_count":   r.avg_witness_count,
                     "flood_witness_count": r.flood_witness_count,
                     "direct_witness_count": r.direct_witness_count,
-                    "avg_latency_ms":      r.avg_latency_ms,
-                    "total_hops":          r.total_hops,
+                    "avg_latency_ms":          r.avg_latency_ms,
+                    "avg_packet_size_bytes":   r.avg_packet_size_bytes,
+                    "total_hops":              r.total_hops,
                     "collision_count":     r.collision_count,
                     "elapsed_s":           r.elapsed_s,
                 }

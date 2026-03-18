@@ -47,23 +47,29 @@ node is a direct neighbour (`metric == 1`) fall through to the standard behaviou
 
 ### 3. Metric-horizon flood suppression (`allowPacketForward`, Strategy C)
 
-Relay nodes with a populated routing table compare the incoming flood packet's
-current hop count against their *routing horizon* — the maximum metric of any
-useful (`path_bytes > 0`) entry in their table.
+**Status: disabled (design defect found).**  `allowPacketForward` currently
+returns `_is_relay` unconditionally, matching the baseline `node_agent`.
 
-A relay whose entire routing knowledge has been surpassed by the flood wave gains
-nothing by re-broadcasting; it is suppressed (`return hops < horizon`).  Relays
-with no useful table data relay unconditionally, matching standard behaviour.
+**Intended design:** relay nodes with a populated routing table would compare
+the flood packet's hop count against their *routing horizon* (max metric of any
+useful entry) and suppress retransmission once the packet has "passed" their
+knowledge sphere.
 
-**Scope — data packets only.** This suppression is applied **only** to encrypted
-data payloads (`TXT_MSG`, `REQ`, `RESPONSE`, `GRP_TXT`, `GRP_DATA`, `ANON_REQ`).
-Control and discovery packets (`ADVERT`, `PATH`, `ACK`) are always relayed
-unconditionally.  Applying the horizon check to advertisements would suppress the
-very flood that populates the routing table, leaving every node's horizon frozen at
-1–2 hops and causing all subsequent message floods to die after a handful of relays.
+**Why it was disabled:** the horizon is a distance from *this relay* to its
+farthest known destination, but the suppression condition `hops >= horizon`
+compares against the hop count from the *source* — a different coordinate
+origin.  In a 10×10 grid, relay `n_9_4` is 5 hops from destination `n_9_9`
+(horizon ≈ 6), but a corner-to-corner flood arrives with 13 hops already.
+`13 ≥ 6` → suppressed — yet the destination is just 5 hops away.  Result: 0%
+delivery on any scenario where source and destination are far apart.
 
-This operates without decrypting or reading the packet destination and is therefore
-compatible with encrypted payloads.
+**Correct designs to explore:**
+
+| Approach | Notes |
+|----------|-------|
+| Global diameter constant | `hops < RT_MAX_HOPS`; simple, requires a deployment-time estimate |
+| Anchor-distance comparison | Each relay stores the estimated network centre and suppresses based on position relative to source direction; requires additional signalling |
+| Downstream-only suppression | Only suppress if *all* next-hop candidates in the path table reach the destination more directly than the current flood path |
 
 ### 4. Bidirectional path exchange fix (`onPeerDataRecv`)
 
@@ -109,11 +115,11 @@ routing mode was used.
 
 | Constant | Value | Rationale |
 |----------|------:|-----------|
-| `RT_MAX_ROUTES` | 64 | Exceeds expected network size (≤50 unique peers in typical deployments); 64 × 73 = 4 672 bytes |
+| `RT_MAX_ROUTES` | 128 | Must exceed the expected number of peers; 128 × 73 = 9 344 bytes.  64 was too small for a 100-node simulation — with 99 peers and only 64 slots, far nodes were frequently evicted before ever being used. |
 | `RT_MAX_AGE` | 3 | Evict stale entries after 3 age cycles (≈ 48 adverts); balances freshness vs. churn |
 | `RT_PATH_CAP` | 64 | Equals `MAX_PATH_SIZE`; guarantees no path is ever truncated in a valid packet |
 | `RT_AGE_EVERY` | 16 | Age every 16 adverts received; roughly one full round of a small network |
-| `RT_ADMIT_PER_CYCLE` | 4 | Sybil rate limit: an adversary can inject at most 4 new entries per 16-advert window |
+| `RT_ADMIT_PER_CYCLE` | 16 | Sybil rate limit: at most 16 new entries per 16-advert window (≈ 1 per advert seen). Set equal to `RT_AGE_EVERY` so a full warmup broadcast can populate the table.  A stricter value (e.g. 4) was found to leave the table only ≈24% full after a single warmup broadcast, causing flood fallbacks and 0% delivery on 100-node grids. |
 | `RT_PINNED_BIT` | `0x80` | Bit 7 of `age`; set manually to protect important routes from eviction |
 | `RT_AGE_MASK` | `0x7F` | Strips pinned bit to read/write the age counter |
 

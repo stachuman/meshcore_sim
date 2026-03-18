@@ -371,5 +371,118 @@ class TestPacketTracerCollisions(unittest.TestCase):
         self.assertEqual(d["packets"][0]["collisions"], [])
 
 
+class TestPacketSizeTracking(unittest.TestCase):
+    """
+    size_bytes is the wire-format byte count of each packet copy at the hop
+    where it was received.  For flood packets this grows by one byte (per 1-byte
+    relay hash) each time a relay retransmits.  For direct packets the size is
+    fixed.
+    """
+
+    def setUp(self):
+        self.tracer = PacketTracer()
+
+    # ---- HopRecord.size_bytes ----
+
+    def test_hop_size_bytes_is_nonzero_after_rx(self):
+        """A recorded hop must have a positive size_bytes."""
+        self.tracer.record_tx("alice", _MSG_HOP0, 0.0)
+        self.tracer.record_rx("alice", "relay1", _MSG_HOP0, 0.01)
+        hop = list(self.tracer.traces.values())[0].hops[0]
+        self.assertGreater(hop.size_bytes, 0)
+
+    def test_hop_size_bytes_equals_hex_length_divided_by_two(self):
+        """size_bytes must equal len(hex_data) // 2 for the received packet."""
+        self.tracer.record_tx("alice", _MSG_HOP0, 0.0)
+        self.tracer.record_rx("alice", "relay1", _MSG_HOP0, 0.01)
+        hop = list(self.tracer.traces.values())[0].hops[0]
+        self.assertEqual(hop.size_bytes, len(_MSG_HOP0) // 2)
+
+    def test_flood_packet_grows_by_one_byte_per_relay(self):
+        """
+        Each relay appends a 1-byte hash to the path field; successive hops
+        of the same flood packet must increase by one byte.
+        """
+        # hop0: alice sends 6-byte packet (header + path_len + 4-byte payload)
+        # hop1: relay1 sends 7-byte packet (one relay hash appended)
+        # hop2: relay2 sends 8-byte packet (two relay hashes appended)
+        self.tracer.record_tx("alice",  _MSG_HOP0, 0.0)
+        self.tracer.record_rx("alice",  "relay1", _MSG_HOP0, 0.01)
+        self.tracer.record_tx("relay1", _MSG_HOP1, 0.02)
+        self.tracer.record_rx("relay1", "relay2", _MSG_HOP1, 0.03)
+        self.tracer.record_tx("relay2", _MSG_HOP2, 0.04)
+        self.tracer.record_rx("relay2", "bob",    _MSG_HOP2, 0.05)
+
+        hops = list(self.tracer.traces.values())[0].hops
+        self.assertEqual(len(hops), 3)
+        # Each successive hop must be exactly 1 byte larger.
+        self.assertEqual(hops[1].size_bytes, hops[0].size_bytes + 1)
+        self.assertEqual(hops[2].size_bytes, hops[1].size_bytes + 1)
+
+    def test_direct_packet_size_is_fixed_across_hops(self):
+        """
+        A direct-routed packet doesn't accumulate relay hashes; every hop
+        that receives it should have the same size.
+        """
+        # Transmit the direct message twice simulating two receivers.
+        tx_id = self.tracer.record_tx("alice", _DIRECT_MSG, 0.0)
+        self.tracer.record_rx("alice", "relay1", _DIRECT_MSG, 0.01, tx_id)
+        self.tracer.record_rx("alice", "bob",    _DIRECT_MSG, 0.02, tx_id)
+
+        hops = list(self.tracer.traces.values())[0].hops
+        self.assertEqual(hops[0].size_bytes, hops[1].size_bytes)
+
+    # ---- PacketTrace.avg_size_bytes ----
+
+    def test_avg_size_bytes_is_zero_with_no_hops(self):
+        """avg_size_bytes must return 0.0 when no hops have been recorded."""
+        self.tracer.record_tx("alice", _MSG_HOP0, 0.0)
+        tr = list(self.tracer.traces.values())[0]
+        self.assertEqual(tr.avg_size_bytes, 0.0)
+
+    def test_avg_size_bytes_single_hop(self):
+        """avg_size_bytes of a single hop equals that hop's size."""
+        self.tracer.record_tx("alice", _MSG_HOP0, 0.0)
+        self.tracer.record_rx("alice", "relay1", _MSG_HOP0, 0.01)
+        tr = list(self.tracer.traces.values())[0]
+        self.assertAlmostEqual(tr.avg_size_bytes, len(_MSG_HOP0) // 2)
+
+    def test_avg_size_bytes_three_hop_flood(self):
+        """avg_size_bytes of a 3-hop flood is the mean of all three sizes."""
+        self.tracer.record_tx("alice",  _MSG_HOP0, 0.0)
+        self.tracer.record_rx("alice",  "relay1", _MSG_HOP0, 0.01)
+        self.tracer.record_tx("relay1", _MSG_HOP1, 0.02)
+        self.tracer.record_rx("relay1", "relay2", _MSG_HOP1, 0.03)
+        self.tracer.record_tx("relay2", _MSG_HOP2, 0.04)
+        self.tracer.record_rx("relay2", "bob",    _MSG_HOP2, 0.05)
+
+        tr = list(self.tracer.traces.values())[0]
+        s0 = len(_MSG_HOP0) // 2  # 6
+        s1 = len(_MSG_HOP1) // 2  # 7
+        s2 = len(_MSG_HOP2) // 2  # 8
+        expected = (s0 + s1 + s2) / 3
+        self.assertAlmostEqual(tr.avg_size_bytes, expected)
+
+    # ---- to_dict serialisation ----
+
+    def test_to_dict_hop_includes_size_bytes(self):
+        """Each hop record in to_dict() must contain a 'size_bytes' field."""
+        self.tracer.record_tx("alice", _MSG_HOP0, 0.0)
+        self.tracer.record_rx("alice", "relay1", _MSG_HOP0, 0.01)
+        d = self.tracer.to_dict()
+        hop = d["packets"][0]["hops"][0]
+        self.assertIn("size_bytes", hop)
+        self.assertEqual(hop["size_bytes"], len(_MSG_HOP0) // 2)
+
+    def test_to_dict_packet_includes_avg_size_bytes(self):
+        """Each packet record in to_dict() must contain an 'avg_size_bytes' field."""
+        self.tracer.record_tx("alice", _MSG_HOP0, 0.0)
+        self.tracer.record_rx("alice", "relay1", _MSG_HOP0, 0.01)
+        d = self.tracer.to_dict()
+        pkt = d["packets"][0]
+        self.assertIn("avg_size_bytes", pkt)
+        self.assertGreater(pkt["avg_size_bytes"], 0.0)
+
+
 if __name__ == "__main__":
     unittest.main()

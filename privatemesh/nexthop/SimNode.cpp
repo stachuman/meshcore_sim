@@ -51,15 +51,15 @@ static void rt_log(const char* fmt, ...) {
 // standard node_agent behaviour (path-exchange direct or flood), preserving
 // full backward compatibility.
 //
-// Memory budget: RT_MAX_ROUTES × sizeof(RouteEntry) = 64 × 73 = 4672 bytes.
+// Memory budget: RT_MAX_ROUTES × sizeof(RouteEntry) = 128 × 73 = 9344 bytes.
 // ---------------------------------------------------------------------------
 
 // ---- Compile-time parameters (see nexthop/README.md for rationale) --------
-#define RT_MAX_ROUTES      64   // table slots; should exceed expected network size
+#define RT_MAX_ROUTES     128   // table slots; must exceed expected network size
 #define RT_MAX_AGE          3   // expire after this many age cycles without refresh
 #define RT_PATH_CAP        64   // max path bytes stored per entry (= MAX_PATH_SIZE)
 #define RT_AGE_EVERY       16   // age entries every N adverts received
-#define RT_ADMIT_PER_CYCLE  4   // Sybil rate limit: max NEW entries per age cycle
+#define RT_ADMIT_PER_CYCLE 16   // Sybil rate limit: max NEW entries per age cycle
 
 // ---- Pinned bit encoding in the age field ---------------------------------
 // Bit 7 of RouteEntry::age is the pinned flag; bits [6:0] carry the counter.
@@ -243,57 +243,28 @@ void SimNode::emitJson(const char* json) const {
 // Routing overrides
 // ---------------------------------------------------------------------------
 
-// Strategy C: metric-horizon flood suppression.
+// allowPacketForward — standard relay behaviour (Strategy C disabled).
 //
-// SCOPE: applied only to encrypted DATA packets (TXT_MSG, REQ, RESPONSE, …).
-// Control and discovery packets — ADVERT, PATH, ACK — are ALWAYS relayed
-// unconditionally so the contact list and routing table are built correctly
-// during the warm-up period.  Applying the horizon check to adverts would
-// suppress the flood that populates the table, leaving every node's horizon
-// frozen at 1-2 hops and causing all subsequent message floods to be killed
-// after a handful of relays.
+// Strategy C was an attempt to suppress flood re-transmission at relays whose
+// routing horizon has been surpassed by the packet's hop count.  The design
+// was fundamentally flawed: "horizon" was computed as the max distance from
+// *this relay* to its farthest known destination, but the suppression condition
+// `hops >= horizon` compares against distance from the *source* to this relay —
+// two different coordinate origins.  Example: relay n_9_4 is 5 hops from
+// destination n_9_9 (horizon ≈ 6), but a corner-to-corner flood arrives with
+// hops=13.  13 ≥ 6 → suppressed — yet the destination is only 5 hops away.
 //
-// With a populated routing table: only retransmit a data flood if the packet
-// has not yet exceeded this node's "routing horizon" — defined as the maximum
-// metric of any useful (path_bytes > 0) entry in the table.
+// A correct metric-horizon design would need either:
+//   (a) the source's position/identity (not available; packet is encrypted), or
+//   (b) a global "network diameter" constant, or
+//   (c) a position-agnostic bound such as `hops < RT_MAX_PATH_HOPS` where
+//       RT_MAX_PATH_HOPS is a deployment-time estimate of the network diameter.
 //
-// Rationale: a relay whose every known destination is closer than the packet
-// has already traveled is "behind" the wave front and adds no new coverage by
-// retransmitting.  Suppressing it reduces total airtime while preserving
-// delivery to all destinations within the routing horizon.
-//
-// Note: this operates without knowledge of the (encrypted) packet destination;
-// suppression is conservative — nodes only go silent when their entire routing
-// knowledge is surpassed by the packet's current hop count.
+// For now we match the baseline node_agent behaviour exactly.
+// Flood suppression can be re-introduced once the geometry is correct.
 bool SimNode::allowPacketForward(const mesh::Packet* packet) {
-    if (!_is_relay) return false;
-
-    // Only apply horizon suppression to encrypted data payloads.
-    // Discovery/control types must propagate freely.
-    uint8_t ptype = packet->getPayloadType();
-    bool is_data = (ptype == PAYLOAD_TYPE_TXT_MSG
-                 || ptype == PAYLOAD_TYPE_REQ
-                 || ptype == PAYLOAD_TYPE_RESPONSE
-                 || ptype == PAYLOAD_TYPE_GRP_TXT
-                 || ptype == PAYLOAD_TYPE_GRP_DATA
-                 || ptype == PAYLOAD_TYPE_ANON_REQ);
-    if (!is_data) return true;
-
-    if (rt_count == 0) return true;  // no table data: behave like standard relay
-
-    uint8_t hops    = packet->getPathHashCount();
-    uint8_t horizon = 0;
-    for (uint8_t i = 0; i < rt_count; i++) {
-        if (rt_table[i].path_bytes > 0) {
-            uint8_t m = rt_table[i].metric;
-            if (m > horizon) horizon = m;
-        }
-    }
-    // If no useful entries exist yet, fall back to standard flood.
-    if (horizon == 0) return true;
-
-    // Suppress if packet has already traveled at least as far as our horizon.
-    return hops < horizon;
+    (void)packet;
+    return _is_relay;
 }
 
 int SimNode::searchPeersByHash(const uint8_t* hash) {
