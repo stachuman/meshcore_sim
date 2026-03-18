@@ -189,6 +189,22 @@ See [`node_agent/README.md`](node_agent/README.md) for the full wire-protocol
 reference (stdin commands and stdout events) if you want to drive a node agent
 manually.
 
+### Building the privatemesh agent
+
+`privatemesh/` contains a separate binary for routing experiments.  It shares
+all `node_agent/` sources except `SimNode.cpp`, which is the only file
+modified per experiment.
+
+```sh
+cd privatemesh
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build
+```
+
+The binary is written to `privatemesh/build/privatemesh_agent`.  See
+[`privatemesh/README.md`](privatemesh/README.md) for details on running
+experiments and measuring patch size.
+
 ---
 
 ## Running the tests
@@ -284,10 +300,19 @@ python3 -m orchestrator topologies/star_five.json \
 python3 -m orchestrator topologies/adversarial.json \
     --duration 60 --seed 7 --report results/adversarial_run.txt
 
-# Run and export trace for visualisation
+# Run and open the visualiser automatically (trace written to a temp file)
+python3 -m orchestrator topologies/grid_10x10.json --duration 30 --seed 42 -v
+
+# Run, keep the trace file, then open the visualiser
 python3 -m orchestrator topologies/grid_10x10.json \
-    --duration 30 --seed 42 --trace-out trace.json
-python3 -m viz topologies/grid_10x10.json --trace trace.json
+    --duration 30 --seed 42 --trace-out trace.json -v
+
+# Use the privatemesh binary for routing experiments (all other flags unchanged)
+python3 -m orchestrator topologies/grid_10x10.json \
+    --agent privatemesh/build/privatemesh_agent --duration 30 -v
+
+# Model constrained-memory devices (64 KB heap per node; enforced on Linux)
+python3 -m orchestrator topologies/grid_10x10.json --max-heap-kb 65536
 
 # Asymmetric RF links
 python3 -m orchestrator topologies/asymmetric_hill.json --duration 120
@@ -356,8 +381,17 @@ At the end of every run the orchestrator prints a report to stdout:
   Delivered messages:
     [    21 ms]  bob → relay1: 'hello from bob t=64864'
     …
+
+  RSS at simulation end:
+    alice            1024 KB
+    bob              1024 KB
+    relay1           1280 KB
 ==================================================
 ```
+
+The `RSS at simulation end` section is omitted when no `--max-heap-kb` limit is
+configured (or when RSS sampling fails).  It reflects the resident-set size of
+each node subprocess at the moment the simulation ends.
 
 TX and RX counts are orchestrator-level packet counts (not the node's internal
 counters).  Latency is wall-clock time from `send_text` command to the
