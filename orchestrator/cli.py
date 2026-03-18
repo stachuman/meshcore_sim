@@ -98,6 +98,16 @@ Examples:
         help="Write packet trace data to this JSON file for use with python3 -m viz",
     )
     p.add_argument(
+        "-v", "--viz",
+        action="store_true",
+        default=False,
+        help=(
+            "Launch the visualiser automatically after the simulation completes.  "
+            "If --trace-out is not specified a temporary file is used.  "
+            "The orchestrator process is replaced by the viz server (Ctrl-C to quit)."
+        ),
+    )
+    p.add_argument(
         "--rf-model",
         choices=["none", "airtime", "contention"],
         default="none",

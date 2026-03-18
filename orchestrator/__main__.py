@@ -7,9 +7,11 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import random
 import resource
 import sys
+import tempfile
 from typing import Optional
 
 from .channel import ChannelModel
@@ -177,8 +179,14 @@ async def run(args: object) -> int:
             fh.write(report)
         log.info("Report written to %s", args.report)                                 # type: ignore[attr-defined]
 
-    if args.trace_out is not None:                                                     # type: ignore[attr-defined]
-        with open(args.trace_out, "w") as fh:                                          # type: ignore[attr-defined]
+    # Determine trace path: explicit --trace-out, or a temp file when -v is set.
+    trace_path: str | None = args.trace_out                                            # type: ignore[attr-defined]
+    if trace_path is None and args.viz:                                                # type: ignore[attr-defined]
+        fd, trace_path = tempfile.mkstemp(suffix=".json", prefix="meshcore_trace_")
+        os.close(fd)
+
+    if trace_path is not None:
+        with open(trace_path, "w") as fh:
             json.dump(
                 tracer.to_dict(
                     topology_path=args.topology,
@@ -186,7 +194,15 @@ async def run(args: object) -> int:
                 ),
                 fh, indent=2,
             )
-        log.info("Trace written to %s", args.trace_out)                               # type: ignore[attr-defined]
+        log.info("Trace written to %s", trace_path)
+
+    if args.viz:                                                                       # type: ignore[attr-defined]
+        log.info("Launching visualiser — Ctrl-C to quit ...")
+        os.execv(sys.executable, [
+            sys.executable, "-m", "viz", args.topology,                               # type: ignore[attr-defined]
+            "--trace", trace_path,
+        ])
+        # os.execv replaces this process; the line below is never reached.
 
     return 0
 

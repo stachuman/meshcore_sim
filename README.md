@@ -267,6 +267,7 @@ python3 -m orchestrator <topology.json> [options]
 | `--log-level` | `info` | `debug` / `info` / `warning` / `error` |
 | `--report FILE` | — | Write final metrics report to a file (always printed to stdout) |
 | `--trace-out FILE` | — | Write packet trace data to a JSON file (load with `python3 -m viz`) |
+| `-v` / `--viz` | off | Launch the visualiser automatically after the simulation. Uses `--trace-out` path if given, otherwise writes to a temp file. Replaces the orchestrator process with the viz server (Ctrl-C to quit). |
 | `--rf-model` | `none` | RF physical-layer model: `none` (instant delivery), `airtime` (delay by LoRa on-air time + propagation), `contention` (airtime + collision detection). Requires a `radio` section in the topology JSON. |
 
 ### Examples
