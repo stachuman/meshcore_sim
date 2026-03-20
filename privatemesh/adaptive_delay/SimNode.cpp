@@ -115,20 +115,20 @@ void SimNode::_update_timing() {
 // getRetransmitDelay — density-adaptive random backoff
 //
 // Adaptive delay scope: DATA packets only (TXT_MSG, PATH, etc.).
-// ADVERT packets use the baseline formula so that network discovery
-// (advert flooding) is not slowed by the adaptive mechanism.
+// ADVERT packets return 0 (no delay), identical to the base SimNode behaviour.
 //
-// Why: adaptive delay uses a wider window ([0, 5 × airtime × txdelay]) to
-// spread out relay retransmissions of DATA floods, reducing last-hop
-// collisions.  However, that same wider window increases the probability
-// that a relay's advert retransmission overlaps with a later node's initial
-// advert broadcast during the stagger phase — making advert discovery worse
-// than baseline for corner nodes in dense grids.  Exempting adverts from
-// adaptive delay preserves the original network-discovery semantics while
-// still demonstrating the DATA-flood collision-reduction benefit.
+// Why zero for adverts: the adaptive delay window is intentionally wide to
+// spread relay retransmissions of DATA floods.  Applying that same wide window
+// to ADVERT relays produces a ~61% chance of symmetric last-hop collisions
+// when two relay nodes (e.g. n_0_1 and n_1_0) independently draw delays
+// within one airtime of each other and both attempt to relay to the same
+// corner node (e.g. n_0_0) simultaneously.  With zero delay, advert flooding
+// is deterministic and relies on multi-path propagation across multiple advert
+// rounds to reach all nodes — identical to the base node_agent behaviour that
+// is already validated by the contention experiment.
 //
 // Returns:
-//   ADVERT: uniform in [0, 5 × t)  where t = (airtime × 52/50) / 2 (baseline)
+//   ADVERT: 0  (no delay — base class behaviour)
 //   other:  uniform in [0, 5 × LORA_AIRTIME_MS × txdelay)  (adaptive)
 //
 // Rationale (from proposal section 3.1):
@@ -142,11 +142,8 @@ uint32_t SimNode::getRetransmitDelay(const mesh::Packet* packet) {
     float max_ms;
 
     if (packet->getPayloadType() == PAYLOAD_TYPE_ADVERT) {
-        // Baseline formula (mirrors Mesh::getRetransmitDelay in Mesh.cpp):
-        //   t = (getEstAirtimeFor(len) * 52 / 50) / 2
-        //   return nextInt(0, 5) * t   →  uniform in [0, 5t)
-        uint32_t t = (_radio->getEstAirtimeFor(packet->getRawLength()) * 52 / 50) / 2;
-        max_ms = 5.0f * (float)t;
+        // No delay for advert relays — avoids symmetric last-hop collision.
+        return 0;
     } else {
         float td = packet->isRouteDirect() ? _direct_txdelay : _txdelay;
         max_ms = 5.0f * LORA_AIRTIME_MS * td;

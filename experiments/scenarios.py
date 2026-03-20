@@ -140,7 +140,13 @@ GRID_10X10 = Scenario(
 #:   which is AFTER n_2_2 at 2.11 s → collision! Stagger=20 s fixes this.
 #:
 #: The adaptive delay improvement applies to DATA floods only.  Adverts use
-#: the baseline formula (Mesh.cpp default) so network discovery is reliable.
+#: zero retransmit delay (same as node_agent / nexthop_agent) so network
+#: discovery is deterministic.  Applying a random non-zero delay to advert
+#: relays in a symmetric grid causes ~61% symmetric last-hop collision
+#: probability at corner nodes (independent draws from [0,1415ms] overlap
+#: within one airtime with P ≈ 0.61 per round), causing persistent 0%
+#: delivery.  Return 0 for adverts is the correct scope boundary: the
+#: adaptive_delay proposal targets DATA flood collisions, not advert flooding.
 #:
 #: readvert_interval=35s: full round = stagger (20 s) + relay cascade
 #: (4 × 2678 ms ≈ 10.7 s) ≈ 30.7 s.  35 s gives a 4.3 s margin.
