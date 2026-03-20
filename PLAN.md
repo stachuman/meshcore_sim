@@ -459,7 +459,39 @@ Viz changes:
 12 new tests in `test_tracer.py` covering `CollisionRecord`, `record_collision`,
 defensive handling, `to_dict` schema v2, and independence from `witness_count`.
 
-### 7. Adversarial test framework
+### 7. Simulation determinism  [FUTURE]
+
+The simulator currently uses real wall-clock time throughout: `SimClock`
+reads `std::chrono::steady_clock`, `SimRNG` reads `/dev/urandom`, and the
+orchestrator uses `asyncio.sleep()` for all delays.  Results are therefore
+not fully reproducible — two runs with the same scenario seed can produce
+different collision outcomes on a loaded machine.
+
+A full analysis of every non-determinism source and two concrete
+implementation plans (a light middle path and a full Discrete-Event
+Simulation architecture) are documented in **`DETERMINISM.md`**.
+
+Summary of the recommended migration path:
+
+**Phase 1 — Middle path (low risk):**
+- Replace `SimRNG` (`/dev/urandom`) with a PRNG seeded from the node's
+  private key → delay values become reproducible.
+- Serialise `router._on_tx` deliveries by receiver name → removes asyncio
+  event-ordering race.
+- Assign deterministic `prv_key` in topology generators → trace fingerprints
+  reproducible across runs.
+
+**Phase 2 — Full DES (when needed for CI or tight-timing scenarios):**
+- Replace `SimClock` with an orchestrator-controlled integer counter.
+- Add `sleep` / `idle` / `wake` protocol messages.
+- Replace all `asyncio.sleep()` in the orchestrator with a simulated-time
+  event queue (`sim_clock.py`).
+- Benefit: scenarios run ~30–100× faster; results are identical across runs
+  regardless of machine load.
+- Trade-off: the interactive `demo/room_server_demo.py` would need a
+  trace-replay mode (the `viz/` tool already provides this).
+
+### 8. Adversarial test framework
 
 Extend the adversarial node model to support:
 - **Passive observer**: records all packets and makes them available for
@@ -504,6 +536,7 @@ by `unique_receivers` to see which adversarial nodes saw which packets.
 |------|--------|
 | 2026-03-16 | `tools/README.md` — full auth guide and CLI reference for scraper; FD-limit fix for large topologies |
 | 2026-03-17 | RF physical-layer model: `--rf-model airtime\|contention`; `airtime.py` (Semtech AN1200.13); `channel.py` (hard collision + capture effect); `RadioConfig` defaults corrected to SF10/BW250/CR4-5; `grid_10x10.json` updated; `fetch_topology.py` gains `--sf/--bw-hz/--cr` and always emits `radio` section; 19 new tests |
+| 2026-03-20 | `DETERMINISM.md` — full analysis of non-determinism sources (SimRNG, SimClock, asyncio ordering) + two-phase remediation plan (middle path + full DES) |
 | 2026-03-19 | `privatemesh/adaptive_delay/` — advert-exemption fix (`getRetransmitDelay` uses baseline formula for ADVERT packets, adaptive only for DATA); `Scenario.stagger_secs`; `GRID_3X3_CONTENTION` stagger=20 s / readvert=35 s / warmup=75 s; adaptive_agent achieves 100% delivery vs 0% baseline under hard-collision model; 393 tests |
 | 2026-03-18 | `privatemesh/adaptive_delay/` — density-adaptive txdelay collision mitigation (Privitt et al. proposal); `Scenario.rf_model`; `grid/3x3\|10x10/contention` scenarios; 379 tests |
 | 2026-03-18 | `privatemesh/nexthop/` — proactive next-hop routing table experiment; 3.24× witness reduction on 10×10 grid at equal delivery rate; `experiments/` comparison framework; packet size tracking (`HopRecord.size_bytes`); 354 tests |
