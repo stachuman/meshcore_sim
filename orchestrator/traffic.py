@@ -38,10 +38,21 @@ class TrafficGenerator:
     # Advertisement flooding
     # ------------------------------------------------------------------
 
-    async def run_initial_adverts(self) -> None:
-        """Flood advertisements from all nodes once, staggered over ~1 s."""
+    async def run_initial_adverts(self, stagger_secs: float = 1.0) -> None:
+        """Flood advertisements from all nodes once, staggered over ~stagger_secs.
+
+        Parameters
+        ----------
+        stagger_secs:
+            Width of the uniform-random stagger window in seconds.  The default
+            of 1.0 s works well for small networks with no RF contention model.
+            For hard-collision scenarios with many nodes, use a wider value
+            (e.g. 5.0 s for a 9-node grid) so simultaneous transmissions —
+            which are collided and lost — are rare enough that every node can
+            get at least one advert through per round.
+        """
         tasks = [
-            self._delayed_advert(agent, self._rng.uniform(0.0, 1.0))
+            self._delayed_advert(agent, self._rng.uniform(0.0, stagger_secs))
             for agent in self._agents.values()
         ]
         await asyncio.gather(*tasks)

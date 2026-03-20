@@ -58,6 +58,13 @@ class Scenario:
         ``"airtime"`` (gate deliveries by on-air time), or ``"contention"``
         (airtime + hard-collision detection).  Requires the topology's
         ``radio`` section to be populated; ignored silently if absent.
+    readvert_interval_secs:
+        When set, re-flood advertisements every this many seconds throughout
+        the warmup period so nodes can recover from collision losses in the
+        initial flood.  Essential for contention-model scenarios where the
+        initial burst may be heavily collided: without re-advertising the
+        source may never learn the destination and delivery will be 0%.
+        Set to ``None`` (default) to send only one initial advert round.
     """
     name: str
     topo_factory: Callable[[], TopologyConfig]
@@ -66,6 +73,18 @@ class Scenario:
     rounds: int = 2
     seed: int = 42
     rf_model: str = "none"   # "none" | "airtime" | "contention"
+    readvert_interval_secs: Optional[float] = None
+    stagger_secs: Optional[float] = None
+    """
+    Width of the uniform-random stagger window used for each advert flood round.
+
+    When ``None`` (default) the ``TrafficGenerator`` default of 1 s is used,
+    which is fine for idealised topologies with no RF model.  For contention
+    scenarios with many nodes, set this to something wider (e.g. ``5.0`` for a
+    9-node grid) so neighbouring nodes are unlikely to transmit simultaneously:
+    with 1 s stagger and 530 ms airtime the centre node almost always collides
+    with the corner nodes, preventing them from ever advertising successfully.
+    """
 
 
 # ---------------------------------------------------------------------------
@@ -211,8 +230,21 @@ async def _run_async(
                  radio=radio, channel=channel)
     traffic = TrafficGenerator(agents, topology, topo_cfg.simulation, metrics, rng)
 
-    await traffic.run_initial_adverts()
-    await asyncio.sleep(scenario.warmup_secs)
+    stagger = scenario.stagger_secs or 1.0
+    await traffic.run_initial_adverts(stagger_secs=stagger)
+    if scenario.readvert_interval_secs is not None:
+        # Re-flood adverts periodically so nodes can recover from collision
+        # losses in the initial burst.  Stop early enough that the last flood
+        # has at least readvert_interval_secs to propagate before warmup ends.
+        elapsed = 0.0
+        interval = scenario.readvert_interval_secs
+        while elapsed + interval * 2 < scenario.warmup_secs:
+            await asyncio.sleep(interval)
+            elapsed += interval
+            await traffic.run_initial_adverts(stagger_secs=stagger)
+        await asyncio.sleep(scenario.warmup_secs - elapsed)
+    else:
+        await asyncio.sleep(scenario.warmup_secs)
 
     # Identify source and destination: first and last endpoint (non-relay, non-room-server).
     endpoints = [n.name for n in topo_cfg.nodes

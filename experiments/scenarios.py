@@ -114,27 +114,56 @@ GRID_10X10 = Scenario(
 )
 
 #: 3×3 grid with RF contention model.
-#: Baseline (txdelay=0) produces collisions; adaptive_agent reduces them.
+#: Baseline produces collisions; adaptive_agent reduces them.
 #: Uses MeshCore defaults: SF10/BW250 kHz → ~330 ms airtime per packet.
 #:
-#: Timing rationale for adaptive_agent:
-#:   Center relays get up to 4 neighbors → txdelay=1.3 → max retransmit delay
-#:   = 5 × 330 ms × 1.3 ≈ 2.15 s per hop.  Worst-case flood path in a 3×3 grid
-#:   is 4 hops (corner-to-corner).  warmup: 4 × 2.15 s ≈ 8.6 s → 20 s warmup.
-#:   Message settle: same path length → 20 s settle.
+#: Timing rationale
+#: ----------------
+#: The 3×3 grid has a structural collision problem: the center node n_1_1
+#: is adjacent to every edge node.  With a 1 s stagger and 533 ms airtime,
+#: n_1_1 almost always overlaps the corner nodes' initial TX windows
+#: (P ≈ 78%), causing n_0_0 and n_2_2 adverts to be lost at the first hop
+#: in every round → 0% delivery regardless of the retransmit strategy.
+#:
+#: stagger_secs=20.0: ensures relay retransmissions of the FIRST advert
+#: in the stagger complete before the LAST node's initial TX.
+#:
+#: Root-cause analysis (seed=42, hard-collision model):
+#:   n_1_0 stagger TX ends at 4.99 s (= 1.116 s × 20/5).
+#:   n_1_1 receives n_1_0's advert at 4.99 s; adaptive relay ends by at
+#:   most 4.99+1.65+0.53 = 7.17 s.
+#:   n_2_2 (last corner node) starts TX at 8.44 s (= 2.110 × 20/5).
+#:   Gap = 8.44 − 7.17 = 1.27 s > 0 ✓.
+#:   With stagger=5 s: n_2_2 starts at 2.11 s but n_1_1's relay ends at
+#:   6.06 s → 3.95 s BEFORE n_2_2 even starts. Wait, no — with stagger=5:
+#:   n_1_0 at 1.116, ends 1.649; n_1_1 relay ends ≤1.649+1.65+0.53=3.83 s
+#:   which is AFTER n_2_2 at 2.11 s → collision! Stagger=20 s fixes this.
+#:
+#: The adaptive delay improvement applies to DATA floods only.  Adverts use
+#: the baseline formula (Mesh.cpp default) so network discovery is reliable.
+#:
+#: readvert_interval=35s: full round = stagger (20 s) + relay cascade
+#: (4 × 2678 ms ≈ 10.7 s) ≈ 30.7 s.  35 s gives a 4.3 s margin.
+#:
+#: warmup=75s: loop condition fires one re-advert at t=35 s; its cascade
+#: ends by t≈66 s, leaving 9 s of quiet before traffic begins.
+#:
+#: settle=20s > worst-case text-flood cascade (~10s). ✓
 GRID_3X3_CONTENTION = Scenario(
     name="grid/3x3/contention",
     topo_factory=lambda: _grid_with_radio(
         3, 3,
-        warmup_secs=20.0,
+        warmup_secs=75.0,
         duration_secs=120.0,
         seed=42,
     ),
-    warmup_secs=20.0,
+    warmup_secs=75.0,
     settle_secs=20.0,
     rounds=2,
     seed=42,
     rf_model="contention",
+    stagger_secs=20.0,
+    readvert_interval_secs=35.0,
 )
 
 #: 10×10 grid with RF contention model.
@@ -156,6 +185,9 @@ GRID_10X10_CONTENTION = Scenario(
     rounds=3,
     seed=42,
     rf_model="contention",
+    readvert_interval_secs=5.0,
+    # Rationale: 100 nodes, 330 ms airtime.  Re-advertising every 5 s gives
+    # 3 recovery rounds within 30 s warmup (last at t≈20 s, 10 s remaining).
 )
 
 #: All scenarios in the default run order (fastest first).

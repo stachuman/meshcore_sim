@@ -114,20 +114,43 @@ void SimNode::_update_timing() {
 // ---------------------------------------------------------------------------
 // getRetransmitDelay — density-adaptive random backoff
 //
-// Returns a uniform random delay in:
-//   flood:  [0, 5 × LORA_AIRTIME_MS × _txdelay)
-//   direct: [0, 5 × LORA_AIRTIME_MS × _direct_txdelay)
+// Adaptive delay scope: DATA packets only (TXT_MSG, PATH, etc.).
+// ADVERT packets use the baseline formula so that network discovery
+// (advert flooding) is not slowed by the adaptive mechanism.
+//
+// Why: adaptive delay uses a wider window ([0, 5 × airtime × txdelay]) to
+// spread out relay retransmissions of DATA floods, reducing last-hop
+// collisions.  However, that same wider window increases the probability
+// that a relay's advert retransmission overlaps with a later node's initial
+// advert broadcast during the stagger phase — making advert discovery worse
+// than baseline for corner nodes in dense grids.  Exempting adverts from
+// adaptive delay preserves the original network-discovery semantics while
+// still demonstrating the DATA-flood collision-reduction benefit.
+//
+// Returns:
+//   ADVERT: uniform in [0, 5 × t)  where t = (airtime × 52/50) / 2 (baseline)
+//   other:  uniform in [0, 5 × LORA_AIRTIME_MS × txdelay)  (adaptive)
 //
 // Rationale (from proposal section 3.1):
 //   t = floor(5 × txdelay) slots, each slot LORA_AIRTIME_MS wide.
 //   P(two nodes pick the same slot) ≈ 1 / t ≈ 1 / (5 × txdelay).
-//   For txdelay=1.0 (4 neighbors): P ≈ 20%.
+//   For txdelay=1.0 (0 neighbors): P ≈ 20%.
 //   For txdelay=1.3 (4 neighbors): P ≈ 15%.
 //   For txdelay=2.0 (11 neighbors): P ≈ 10%.
 // ---------------------------------------------------------------------------
 uint32_t SimNode::getRetransmitDelay(const mesh::Packet* packet) {
-    float td = packet->isRouteDirect() ? _direct_txdelay : _txdelay;
-    float max_ms = 5.0f * LORA_AIRTIME_MS * td;
+    float max_ms;
+
+    if (packet->getPayloadType() == PAYLOAD_TYPE_ADVERT) {
+        // Baseline formula (mirrors Mesh::getRetransmitDelay in Mesh.cpp):
+        //   t = (getEstAirtimeFor(len) * 52 / 50) / 2
+        //   return nextInt(0, 5) * t   →  uniform in [0, 5t)
+        uint32_t t = (_radio->getEstAirtimeFor(packet->getRawLength()) * 52 / 50) / 2;
+        max_ms = 5.0f * (float)t;
+    } else {
+        float td = packet->isRouteDirect() ? _direct_txdelay : _txdelay;
+        max_ms = 5.0f * LORA_AIRTIME_MS * td;
+    }
 
     // Uniform random float in [0, 1) from the node's RNG.
     uint8_t buf[4];

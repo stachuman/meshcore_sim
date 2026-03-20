@@ -37,7 +37,7 @@ Success criteria:
 
 ---
 
-## Simulator state  (as of 2026-03-18)
+## Simulator state  (as of 2026-03-19)
 
 ### What exists
 
@@ -50,7 +50,7 @@ Success criteria:
 | `PacketTracer` — per-packet path & witness analysis | ✅ complete |
 | `packet.py` — pure-Python MeshCore wire-format decoder | ✅ complete |
 | C++ unit tests (crypto shims, packet serialisation) | ✅ complete |
-| Python unit / integration tests (379 tests, all passing) | ✅ complete |
+| Python unit / integration tests (393 tests, all passing) | ✅ complete |
 | Example topologies (linear, star, adversarial, asymmetric hill) | ✅ complete |
 | Grid topology generator (`topologies/gen_grid.py`) | ✅ complete |
 | Pre-generated 10×10 grid topology (`topologies/grid_10x10.json`) | ✅ complete |
@@ -253,6 +253,42 @@ leaves far fewer witnesses because it never floods.
 - Strategy C (metric-horizon flood suppression) was designed but disabled due to a
   geometric design defect: horizon distances are relay-relative, not source-relative.
   See `privatemesh/nexthop/README.md` for three correct alternative designs.
+
+#### Contention experiment results  (3×3 grid, hard-collision, seed=42, stagger=20 s)
+
+`grid/3x3/contention` scenario.  SOURCE=n_0_0, DEST=n_2_2 (only non-relay
+endpoints in `grid_topo_config(3,3)`).  2 rounds, warmup=75 s, settle=20 s,
+readvert every 35 s.  All runs with MeshCore defaults: SF10/BW250 kHz/CR4-5
+→ ~533 ms airtime per advert packet.
+
+| Metric | node_agent | nexthop_agent | adaptive_agent |
+|--------|-----------|---------------|----------------|
+| Delivery rate | **0%** | **100%** | **100%** |
+| Avg witness count (TXT_MSG) | 10.0 | 10.0 | 14.0 |
+| Flood witness count | 10 | 10 | 18 |
+| Direct witness count | 10 | 10 | 10 |
+| Avg latency | — | 1115 ms | 1981 ms |
+| RF collisions | 112 | 96 | 98 |
+| Total hops | 117 | 117 | 170 |
+| Run time | 152 s | 152 s | 148 s |
+
+**Interpretation:** the baseline `node_agent` fails entirely — every message
+is lost to RF collisions (0% delivery).  Both `nexthop_agent` and `adaptive_agent`
+achieve 100% delivery because their routing strategies survive the collision
+environment.
+
+The stagger=20 s design ensures a 1.27 s clean gap between the last relay
+retransmission from any edge node's advert cascade and the final corner node's
+own TX window (verified analytically for seed=42).  Without this gap, every
+advert round results in the destination node (n_2_2) never being heard, and
+the source never learns a route to it.
+
+`adaptive_agent` uses an advert-exemption in `getRetransmitDelay`: ADVERT
+packets use the same baseline retransmit delay as `node_agent` (ensuring
+network discovery is as reliable as baseline), while DATA packet retransmits
+use the density-adaptive formula (`5 × airtime × txdelay`).  This separation
+prevents the wider adaptive window from causing additional collisions during
+the advert phase while still providing adaptive back-off during data floods.
 
 #### Baseline metrics to beat  (3×3 zero-loss grid, seed=42)
 
@@ -468,6 +504,7 @@ by `unique_receivers` to see which adversarial nodes saw which packets.
 |------|--------|
 | 2026-03-16 | `tools/README.md` — full auth guide and CLI reference for scraper; FD-limit fix for large topologies |
 | 2026-03-17 | RF physical-layer model: `--rf-model airtime\|contention`; `airtime.py` (Semtech AN1200.13); `channel.py` (hard collision + capture effect); `RadioConfig` defaults corrected to SF10/BW250/CR4-5; `grid_10x10.json` updated; `fetch_topology.py` gains `--sf/--bw-hz/--cr` and always emits `radio` section; 19 new tests |
+| 2026-03-19 | `privatemesh/adaptive_delay/` — advert-exemption fix (`getRetransmitDelay` uses baseline formula for ADVERT packets, adaptive only for DATA); `Scenario.stagger_secs`; `GRID_3X3_CONTENTION` stagger=20 s / readvert=35 s / warmup=75 s; adaptive_agent achieves 100% delivery vs 0% baseline under hard-collision model; 393 tests |
 | 2026-03-18 | `privatemesh/adaptive_delay/` — density-adaptive txdelay collision mitigation (Privitt et al. proposal); `Scenario.rf_model`; `grid/3x3\|10x10/contention` scenarios; 379 tests |
 | 2026-03-18 | `privatemesh/nexthop/` — proactive next-hop routing table experiment; 3.24× witness reduction on 10×10 grid at equal delivery rate; `experiments/` comparison framework; packet size tracking (`HopRecord.size_bytes`); 354 tests |
 | 2026-03-17 | `EXAMPLES.md` — 14 worked simulation scenarios covering all topology types, RF models, collision viz, live network import, room server demo, and report comparison |

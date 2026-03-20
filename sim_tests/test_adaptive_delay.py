@@ -6,6 +6,7 @@ Unit tests (always run):
   - Density-table lookup logic (Python mirror of C++ DENSITY_TABLE).
   - Scenario rf_model field defaults and contention-scenario registration.
   - experiments/scenarios.py registration of new binary and scenarios.
+  - SimRadio airtime consistency (cross-check C++ formula against orchestrator).
 
 Integration tests (skipped when binary absent):
   - adaptive_agent runs correctly on a contention scenario.
@@ -237,6 +238,279 @@ class TestScenarioRfModel(unittest.TestCase):
         self.assertGreater(
             GRID_3X3_CONTENTION.settle_secs, GRID_3X3.settle_secs,
             msg="Contention scenario settle_secs should exceed the no-rf variant",
+        )
+
+    def test_default_readvert_interval_is_none(self):
+        """Non-contention scenarios default to no periodic re-advertising."""
+        from experiments.runner import Scenario
+        from sim_tests.helpers import grid_topo_config
+        s = Scenario(name="test", topo_factory=lambda: grid_topo_config(3, 3))
+        self.assertIsNone(s.readvert_interval_secs)
+
+    def test_non_contention_scenarios_have_no_readvert_interval(self):
+        from experiments.scenarios import LINEAR, GRID_3X3, GRID_10X10
+        for sc in [LINEAR, GRID_3X3, GRID_10X10]:
+            self.assertIsNone(
+                sc.readvert_interval_secs,
+                msg=f"{sc.name} should not re-advertise (no RF contention)",
+            )
+
+    def test_contention_scenarios_have_positive_readvert_interval(self):
+        """grid/*/contention must re-advertise to survive initial collision burst."""
+        from experiments.scenarios import GRID_3X3_CONTENTION, GRID_10X10_CONTENTION
+        for sc in [GRID_3X3_CONTENTION, GRID_10X10_CONTENTION]:
+            self.assertIsNotNone(
+                sc.readvert_interval_secs,
+                msg=f"{sc.name} must have readvert_interval_secs set",
+            )
+            self.assertGreater(
+                sc.readvert_interval_secs, 0.0,
+                msg=f"{sc.name} readvert_interval_secs must be positive",
+            )
+
+    def test_readvert_interval_allows_at_least_one_round(self):
+        """
+        The runner loop fires while ``elapsed + interval*2 < warmup``.
+        For the first iteration (elapsed=0) this requires ``interval*2 < warmup``.
+        Verify that at least one re-advert is guaranteed.
+        """
+        from experiments.scenarios import GRID_3X3_CONTENTION
+        sc = GRID_3X3_CONTENTION
+        self.assertLess(
+            sc.readvert_interval_secs * 2, sc.warmup_secs,  # type: ignore[operator]
+            msg=(
+                f"{sc.name}: readvert_interval_secs={sc.readvert_interval_secs} "
+                f"× 2 = {sc.readvert_interval_secs * 2} is not < "  # type: ignore[operator]
+                f"warmup_secs={sc.warmup_secs}; no re-advert would fire"
+            ),
+        )
+
+    def test_readvert_interval_exceeds_full_round_time(self):
+        """
+        readvert_interval must exceed the FULL round time so successive rounds
+        do not interfere:
+
+            full_round_s = stagger_secs + relay_cascade_s
+
+        where relay_cascade_s = 4 hops × (max_delay_ms + airtime_ms)
+                               = 4 × (5 × 330 × 1.3 + 330) ms ≈ 9.9 s.
+
+        With stagger_secs=5 the total is ≈14.9 s.  A readvert_interval at or
+        below this value would let round-0 relay retransmissions still be in
+        flight when round-1 stagger begins, inflating collision counts.
+        """
+        from experiments.scenarios import GRID_3X3_CONTENTION
+        sc = GRID_3X3_CONTENTION
+        AIRTIME_MS = 330.0
+        MAX_TXDELAY = 1.3           # 4-neighbor nodes in 3×3 grid
+        MAX_DELAY_MS = 5 * AIRTIME_MS * MAX_TXDELAY
+        HOPS = 4                    # corner-to-corner path length
+        relay_cascade_s = HOPS * (MAX_DELAY_MS + AIRTIME_MS) / 1000.0
+        stagger_s = sc.stagger_secs or 1.0
+        full_round_s = stagger_s + relay_cascade_s
+        self.assertGreater(
+            sc.readvert_interval_secs, full_round_s,  # type: ignore[operator]
+            msg=(
+                f"{sc.name}: readvert_interval_secs={sc.readvert_interval_secs} "
+                f"≤ full_round_s={full_round_s:.1f} "
+                f"(stagger={stagger_s:.1f}s + cascade={relay_cascade_s:.1f}s); "
+                "successive advert rounds will interfere and increase collisions"
+            ),
+        )
+
+    def test_default_stagger_secs_is_none(self):
+        """Non-contention scenarios default to the 1-second built-in stagger."""
+        from experiments.runner import Scenario
+        from sim_tests.helpers import grid_topo_config
+        s = Scenario(name="test", topo_factory=lambda: grid_topo_config(3, 3))
+        self.assertIsNone(s.stagger_secs)
+
+    def test_non_contention_scenarios_have_no_custom_stagger(self):
+        from experiments.scenarios import LINEAR, GRID_3X3, GRID_10X10
+        for sc in [LINEAR, GRID_3X3, GRID_10X10]:
+            self.assertIsNone(
+                sc.stagger_secs,
+                msg=f"{sc.name} should use default 1-second stagger",
+            )
+
+    def test_contention_scenario_has_wider_stagger(self):
+        """
+        GRID_3X3_CONTENTION must use stagger_secs > 1 s to avoid the
+        centre-node interference that prevents corner-node adverts from
+        propagating (root cause of 0% delivery in the contention scenario).
+        """
+        from experiments.scenarios import GRID_3X3_CONTENTION
+        sc = GRID_3X3_CONTENTION
+        self.assertIsNotNone(
+            sc.stagger_secs,
+            msg=f"{sc.name}: stagger_secs must be set (not None)",
+        )
+        self.assertGreater(
+            sc.stagger_secs, 1.0,  # type: ignore[operator]
+            msg=(
+                f"{sc.name}: stagger_secs={sc.stagger_secs} must be > 1.0 s; "
+                "a 1-second stagger with 9 nodes causes 78% collision probability "
+                "at corner nodes due to centre-node interference"
+            ),
+        )
+
+    def test_stagger_allows_gap_between_node_transmissions(self):
+        """
+        With stagger_secs / n_nodes > airtime_ms / 1000, the expected inter-TX
+        gap exceeds the airtime, making simultaneous-TX collisions unlikely.
+        Verify for the 3×3 grid (9 nodes, ~533 ms airtime).
+        """
+        from experiments.scenarios import GRID_3X3_CONTENTION
+        sc = GRID_3X3_CONTENTION
+        stagger_s = sc.stagger_secs or 1.0
+        n_nodes = 9            # 3×3 grid
+        airtime_s = 0.533      # SF10/BW250/CR4-5 at 108 B ≈ 533 ms
+        mean_gap_s = stagger_s / n_nodes
+        self.assertGreater(
+            mean_gap_s, airtime_s,
+            msg=(
+                f"Mean inter-TX gap {mean_gap_s:.3f} s ≤ airtime {airtime_s} s; "
+                "simultaneous transmissions will be common"
+            ),
+        )
+
+
+# ---------------------------------------------------------------------------
+# Unit: SimRadio airtime consistency
+#
+# These tests cross-check the C++ SimRadio::getEstAirtimeFor formula against
+# the Python orchestrator's lora_airtime_ms() reference implementation.
+#
+# Motivation: a factor-of-1000 bug in SimRadio (returning 6250 ms for a
+# 50-byte packet instead of ~308 ms) made the baseline node_agent's default
+# getRetransmitDelay() produce delays of 0–16 s, which accidentally spread
+# retransmissions so widely that the adaptive agent showed no advantage at
+# all.  These tests catch that class of error without requiring any binary.
+#
+# Convention: _sim_radio_airtime_ms() is a Python mirror of the C++ formula
+# documented in node_agent/SimRadio.cpp.  If the C++ formula is changed,
+# update _SIMRADIO_OVERHEAD_MS and _SIMRADIO_MS_PER_BYTE here too.
+# ---------------------------------------------------------------------------
+
+class TestSimRadioAirtimeConsistency(unittest.TestCase):
+    """
+    Cross-check SimRadio::getEstAirtimeFor (C++) against lora_airtime_ms()
+    (Python orchestrator) for SF10 / BW250 kHz / CR4-5.
+
+    All tests are pure Python; they replicate the formula documented in
+    SimRadio.cpp's comment.  A large discrepancy would mean the two sides of
+    the simulation are using inconsistent airtime models, which invalidates
+    the RF contention scenario results.
+    """
+
+    # Mirrors SimRadio::getEstAirtimeFor (node_agent/SimRadio.cpp).
+    # Update these constants whenever the C++ formula changes.
+    _OVERHEAD_MS    = 103.0   # fixed preamble + header overhead
+    _MS_PER_BYTE    = 4.1     # per-payload-byte coefficient
+
+    @classmethod
+    def _sim_radio_airtime_ms(cls, len_bytes: int) -> float:
+        """Python replica of SimRadio::getEstAirtimeFor."""
+        return cls._OVERHEAD_MS + len_bytes * cls._MS_PER_BYTE
+
+    @staticmethod
+    def _orchestrator_airtime_ms(len_bytes: int) -> float:
+        """Reference: Python orchestrator formula (Semtech AN1200.13)."""
+        from orchestrator.airtime import lora_airtime_ms
+        return lora_airtime_ms(sf=10, bw_hz=250_000, cr=1,
+                               payload_bytes=len_bytes)
+
+    # -- plausibility --
+
+    def test_50_byte_airtime_in_plausible_range(self):
+        """
+        getEstAirtimeFor(50) must be in [200, 500] ms.
+
+        This is the most direct regression for the ×1000 bug:
+        the buggy formula returned 6250 ms, which this test rejects.
+        """
+        t = self._sim_radio_airtime_ms(50)
+        self.assertGreater(t, 200,
+                           msg=f"SimRadio airtime too low: {t:.0f} ms for 50 B")
+        self.assertLess(t, 500,
+                        msg=f"SimRadio airtime too high: {t:.0f} ms for 50 B")
+
+    def test_airtime_matches_orchestrator_within_factor_of_two(self):
+        """
+        SimRadio must be within 2× of lora_airtime_ms() for typical packet
+        sizes.  A factor-of-1000 error fails trivially; even a factor-of-3
+        error would indicate a wrong SF/BW assumption.
+        """
+        for n in (30, 40, 50, 60, 70, 80):
+            sim_t = self._sim_radio_airtime_ms(n)
+            ref_t = self._orchestrator_airtime_ms(n)
+            ratio = sim_t / ref_t
+            self.assertLess(
+                ratio, 2.0,
+                msg=f"SimRadio({n}B)={sim_t:.0f} ms is >2× orchestrator "
+                    f"{ref_t:.0f} ms (ratio={ratio:.2f})",
+            )
+            self.assertGreater(
+                ratio, 0.5,
+                msg=f"SimRadio({n}B)={sim_t:.0f} ms is <0.5× orchestrator "
+                    f"{ref_t:.0f} ms (ratio={ratio:.2f})",
+            )
+
+    def test_airtime_increases_with_packet_length(self):
+        """Longer packets must take longer to transmit (monotone increasing)."""
+        sizes = [20, 30, 40, 50, 60, 70, 80]
+        prev = self._sim_radio_airtime_ms(sizes[0])
+        for n in sizes[1:]:
+            t = self._sim_radio_airtime_ms(n)
+            self.assertGreater(
+                t, prev,
+                msg=f"airtime({n}B)={t:.0f} ms ≤ airtime({n-10}B)={prev:.0f} ms",
+            )
+            prev = t
+
+    # -- derived delay bounds --
+
+    def test_baseline_retransmit_t_below_250ms(self):
+        """
+        The default Mesh::getRetransmitDelay computes:
+            t = (getEstAirtimeFor(len) * 52 / 50) / 2
+        and returns nextInt(0, 5) * t.
+
+        For a 50-byte packet t must be < 250 ms so the maximum baseline delay
+        stays below 1250 ms.  The ×1000 bug gave t ≈ 3250 ms and a maximum
+        delay of 16250 ms, completely hiding the adaptive agent's benefit.
+        """
+        airtime = self._sim_radio_airtime_ms(50)
+        t = int(airtime * 52 // 50) // 2          # mirrors integer arithmetic in Mesh.cpp
+        self.assertLess(
+            t, 250,
+            msg=f"Baseline retransmit t={t} ms is too large; check "
+                "SimRadio::getEstAirtimeFor for a factor-of-N error",
+        )
+
+    def test_adaptive_max_delay_exceeds_baseline_max_delay(self):
+        """
+        For a 4-neighbor node, adaptive max delay = 5 × 330 ms × 1.3 = 2145 ms.
+        Baseline max delay = 5 × t ≈ 5 × 160 ms = 800 ms.
+
+        Adaptive must be strictly larger: that wider window is what reduces the
+        collision probability from ~39 % to ~14 % per transmitter pair.
+        """
+        AIRTIME_MS         = 330.0
+        TXDELAY_4_NEIGHBORS = 1.3
+        adaptive_max_ms = 5.0 * AIRTIME_MS * TXDELAY_4_NEIGHBORS   # 2145 ms
+
+        baseline_airtime = self._sim_radio_airtime_ms(50)
+        t = int(baseline_airtime * 52 // 50) // 2
+        baseline_max_ms = 5 * t                                      # ≈ 800 ms
+
+        self.assertGreater(
+            adaptive_max_ms, baseline_max_ms,
+            msg=(
+                f"Adaptive max delay {adaptive_max_ms:.0f} ms should exceed "
+                f"baseline max delay {baseline_max_ms:.0f} ms; "
+                "check SimRadio::getEstAirtimeFor and LORA_AIRTIME_MS"
+            ),
         )
 
 
