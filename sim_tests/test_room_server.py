@@ -45,7 +45,7 @@ def _room_server_star_config() -> TopologyConfig:
     connects to a room_server node.  Zero loss, zero latency everywhere.
     """
     sim = SimulationConfig(
-        warmup_secs=2.5,
+        warmup_secs=8.0,
         duration_secs=999.0,    # driven manually
         traffic_interval_secs=9999.0,
         advert_interval_secs=9999.0,
@@ -76,8 +76,8 @@ async def _run_room_server_sim(
     *,
     sender: str,
     message: str,
-    warmup_secs: float = 2.5,
-    delivery_wait: float = 2.5,
+    warmup_secs: float = 8.0,
+    delivery_wait: float = 5.0,
 ) -> tuple[
     dict[str, NodeAgent],
     List[tuple[str, dict]],   # room_post events: (node_name, event)
@@ -98,7 +98,7 @@ async def _run_room_server_sim(
     topology = Topology(topo_cfg)
 
     agents: dict[str, NodeAgent] = {
-        n.name: NodeAgent(n, topo_cfg.simulation)
+        n.name: NodeAgent(n, topo_cfg.simulation, radio=topo_cfg.radio)
         for n in topo_cfg.nodes
     }
 

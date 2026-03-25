@@ -48,6 +48,7 @@ cmake --build build
 
 ```
 node_agent [--relay | --room-server] [--name <str>] [--prv <128-hex-char private key>]
+           [--sf <int>] [--bw <int>] [--cr <int>]
 ```
 
 | Flag | Description |
@@ -55,7 +56,10 @@ node_agent [--relay | --room-server] [--name <str>] [--prv <128-hex-char private
 | `--relay` | Node forwards flood packets it hasn't seen before (repeater). Mutually exclusive with `--room-server`. |
 | `--room-server` | Node acts as a room server: every received TXT_MSG is re-broadcast to all other known contacts. Emits a `room_post` event per forwarded message. Mutually exclusive with `--relay`. |
 | `--name <str>` | Human-readable node name included in the `ready` message and embedded in Advertisement packets. Defaults to `node`. |
-| `--prv <hex>` | 128-hex-character (64-byte) Ed25519 private key. The matching public key is derived automatically. If omitted, a fresh random identity is generated on each run. |
+| `--prv <hex>` | 128-hex-character (64-byte) Ed25519 private key. The matching public key is derived automatically. If omitted, a deterministic identity is derived from the node name (seeded xoshiro256** PRNG). |
+| `--sf <int>` | LoRa spreading factor (7–12). Used by `SimRadio::getEstAirtimeFor()` for accurate airtime estimation. Default: `8`. |
+| `--bw <int>` | LoRa bandwidth in Hz. Default: `62500` (62.5 kHz). |
+| `--cr <int>` | LoRa coding-rate offset (1=CR4/5 … 4=CR4/8). Default: `4` (CR4/8). |
 
 On startup the node writes a `ready` line to stdout and then enters its main
 loop, reading commands from stdin and writing events to stdout.
@@ -126,7 +130,7 @@ node_agent/
 ├── main.cpp               # select()-based stdin/stdout main loop
 ├── SimRadio.h / .cpp      # Radio impl: recvRaw() from queue, startSendRaw() → stdout
 ├── SimClock.h / .cpp      # MillisecondClock + RTCClock backed by wall clock
-├── SimRNG.h   / .cpp      # RNG from /dev/urandom
+├── SimRNG.h   / .cpp      # Deterministic PRNG (xoshiro256**, seeded from --prv or name)
 ├── SimNode.h  / .cpp      # Mesh subclass: routing policy, event callbacks
 ├── arduino_shim/
 │   └── Stream.h           # Minimal Arduino Stream stub (~50 lines)

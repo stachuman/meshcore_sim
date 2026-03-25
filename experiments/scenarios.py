@@ -72,12 +72,12 @@ def _grid_with_radio(rows: int, cols: int, **sim_overrides):
 LINEAR = Scenario(
     name="linear/3-node",
     topo_factory=lambda: linear_three_config(
-        warmup_secs=2.0,
+        warmup_secs=5.0,
         duration_secs=30.0,
         seed=42,
     ),
-    warmup_secs=2.0,
-    settle_secs=2.0,
+    warmup_secs=5.0,
+    settle_secs=5.0,
     rounds=2,
     seed=42,
 )
@@ -88,12 +88,12 @@ GRID_3X3 = Scenario(
     name="grid/3x3",
     topo_factory=lambda: grid_topo_config(
         3, 3,
-        warmup_secs=3.0,
+        warmup_secs=10.0,
         duration_secs=30.0,
         seed=42,
     ),
-    warmup_secs=3.0,
-    settle_secs=3.0,
+    warmup_secs=10.0,
+    settle_secs=5.0,
     rounds=2,
     seed=42,
 )
@@ -103,12 +103,12 @@ GRID_10X10 = Scenario(
     name="grid/10x10",
     topo_factory=lambda: grid_topo_config(
         10, 10,
-        warmup_secs=10.0,
+        warmup_secs=20.0,
         duration_secs=60.0,
         seed=42,
     ),
-    warmup_secs=10.0,
-    settle_secs=5.0,
+    warmup_secs=20.0,
+    settle_secs=10.0,
     rounds=3,
     seed=42,
 )

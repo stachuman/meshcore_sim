@@ -34,8 +34,8 @@ async def _run_grid_sim(
     cols: int,
     *,
     loss: float = 0.0,
-    warmup_secs: float = 5.0,
-    path_exchange_wait: float = 3.0,
+    warmup_secs: float = 15.0,
+    path_exchange_wait: float = 8.0,
     seed: int = 42,
 ) -> tuple[dict[str, NodeAgent], MetricsCollector, PacketTracer]:
     """
@@ -66,7 +66,7 @@ async def _run_grid_sim(
     topology = Topology(topo_cfg)
 
     agents: dict[str, NodeAgent] = {
-        n.name: NodeAgent(n, topo_cfg.simulation)
+        n.name: NodeAgent(n, topo_cfg.simulation, radio=topo_cfg.radio)
         for n in topo_cfg.nodes
     }
     await asyncio.gather(*(a.start() for a in agents.values()))
@@ -143,8 +143,8 @@ class TestGridRouting3x3(unittest.TestCase):
         cls.agents, cls.metrics, cls.tracer = asyncio.run(
             _run_grid_sim(cls.ROWS, cls.COLS,
                           loss=0.0,
-                          warmup_secs=3.0,
-                          path_exchange_wait=3.0)
+                          warmup_secs=10.0,
+                          path_exchange_wait=8.0)
         )
         cls.txt_traces = _txt_traces(cls.tracer)
 
@@ -256,8 +256,8 @@ class TestGridMetrics5x5(unittest.TestCase):
         cls.agents, cls.metrics, cls.tracer = asyncio.run(
             _run_grid_sim(cls.ROWS, cls.COLS,
                           loss=0.0,
-                          warmup_secs=5.0,
-                          path_exchange_wait=4.0)
+                          warmup_secs=15.0,
+                          path_exchange_wait=8.0)
         )
 
     def test_all_nodes_ready(self):

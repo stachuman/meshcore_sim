@@ -4,6 +4,10 @@
 #include <string.h>
 #include <algorithm>
 
+#if __has_include(<helpers/DelayTuning.h>)
+#define HAS_AUTOTUNE 1
+#endif
+
 // ---------------------------------------------------------------------------
 // Hex helpers
 // ---------------------------------------------------------------------------
@@ -204,6 +208,12 @@ void SimNode::onAdvertRecv(mesh::Packet* /*packet*/, const mesh::Identity& id,
              "{\"type\":\"advert\",\"pub\":\"%s\",\"name\":\"%s\"}",
              pub_hex, existing->name.c_str());
     emitJson(json);
+
+#if HAS_AUTOTUNE
+    // Mimic MyMesh::putNeighbour() — recalculate density-adaptive delays
+    // every time we learn about a (new or existing) neighbor.
+    autoTuneByNeighborCount((int)_contacts.size());
+#endif
 }
 
 void SimNode::onAckRecv(mesh::Packet* /*packet*/, uint32_t ack_crc) {

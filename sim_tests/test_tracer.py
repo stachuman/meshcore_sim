@@ -484,5 +484,78 @@ class TestPacketSizeTracking(unittest.TestCase):
         self.assertGreater(pkt["avg_size_bytes"], 0.0)
 
 
+class TestPacketTracerTiming(unittest.TestCase):
+    """Tests for the timing section: relay delay, flood propagation, airtime."""
+
+    def test_tx_events_populated(self):
+        """record_tx stores (sender, time) in _tx_events."""
+        tracer = PacketTracer()
+        tx_id = tracer.record_tx("alice", _MSG_HOP0, 1.0)
+        self.assertIn(tx_id, tracer._tx_events)
+        sender, t = tracer._tx_events[tx_id]
+        self.assertEqual(sender, "alice")
+        self.assertAlmostEqual(t, 1.0)
+
+    def test_relay_delay_computation(self):
+        """Relay that receives at t=0.5 and retransmits at t=0.8 has 300 ms delay."""
+        tracer = PacketTracer()
+        # Alice originates at t=0.0
+        tx_id1 = tracer.record_tx("alice", _MSG_HOP0, 0.0)
+        # relay1 receives at t=0.5
+        tracer.record_rx("alice", "relay1", _MSG_HOP0, 0.5, tx_id1)
+        # relay1 retransmits at t=0.8
+        tx_id2 = tracer.record_tx("relay1", _MSG_HOP1, 0.8)
+        tracer.record_rx("relay1", "bob", _MSG_HOP1, 1.0, tx_id2)
+
+        delays = tracer.compute_relay_delays()
+        self.assertEqual(len(delays), 1)
+        self.assertAlmostEqual(delays[0], 300.0, places=0)
+
+    def test_relay_delay_excludes_originator(self):
+        """The packet originator should not appear in relay delay list."""
+        tracer = PacketTracer()
+        tx_id1 = tracer.record_tx("alice", _MSG_HOP0, 0.0)
+        tracer.record_rx("alice", "relay1", _MSG_HOP0, 0.1, tx_id1)
+        # alice receives a copy back (from relay1 broadcast)
+        tx_id2 = tracer.record_tx("relay1", _MSG_HOP1, 0.2)
+        tracer.record_rx("relay1", "alice", _MSG_HOP1, 0.3, tx_id2)
+
+        delays = tracer.compute_relay_delays()
+        # Only relay1's delay should be counted, not alice
+        self.assertEqual(len(delays), 1)
+        senders = [tracer._tx_events[tid][0]
+                   for tid in [tx_id1, tx_id2]
+                   if tracer._tx_events[tid][0] != "alice"]
+        self.assertEqual(senders, ["relay1"])
+
+    def test_flood_propagation_in_report(self):
+        """Report includes 'Flood propagation time' for flood packets."""
+        tracer = PacketTracer()
+        tx_id = tracer.record_tx("alice", _MSG_HOP0, 0.0)
+        tracer.record_rx("alice", "relay1", _MSG_HOP0, 0.5, tx_id)
+        tx_id2 = tracer.record_tx("relay1", _MSG_HOP1, 0.6)
+        tracer.record_rx("relay1", "bob", _MSG_HOP1, 1.2, tx_id2)
+        report = tracer.report()
+        self.assertIn("Flood propagation time", report)
+
+    def test_airtime_in_report(self):
+        """Report includes 'Avg airtime per hop' when airtime data is present."""
+        tracer = PacketTracer()
+        tx_id = tracer.record_tx("alice", _MSG_HOP0, 0.0, airtime_ms=443.0)
+        tracer.record_rx("alice", "relay1", _MSG_HOP0, 0.5, tx_id)
+        report = tracer.report()
+        self.assertIn("Avg airtime per hop", report)
+        self.assertIn("443", report)
+
+    def test_timing_section_absent_when_no_data(self):
+        """Timing section not shown when there are no airtime/relay/flood data."""
+        tracer = PacketTracer()
+        # Direct-routed message with no airtime → no timing data
+        tx_id = tracer.record_tx("alice", _DIRECT_MSG, 0.0)
+        tracer.record_rx("alice", "bob", _DIRECT_MSG, 0.01, tx_id)
+        report = tracer.report()
+        self.assertNotIn("Timing:", report)
+
+
 if __name__ == "__main__":
     unittest.main()

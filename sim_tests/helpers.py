@@ -47,7 +47,7 @@ def linear_three_config(**sim_overrides) -> TopologyConfig:
     5 % loss, 20 ms latency, SNR 8 dB.
     """
     sim = SimulationConfig(
-        warmup_secs=1.0,
+        warmup_secs=5.0,
         duration_secs=10.0,
         traffic_interval_secs=2.0,
         advert_interval_secs=30.0,
@@ -76,7 +76,7 @@ def two_node_direct_config(**sim_overrides) -> TopologyConfig:
     alice (endpoint) -- bob (endpoint)  No relay, perfect link.
     """
     sim = SimulationConfig(
-        warmup_secs=0.5,
+        warmup_secs=3.0,
         duration_secs=5.0,
         traffic_interval_secs=1.0,
         advert_interval_secs=30.0,
@@ -135,7 +135,7 @@ def grid_topo_config(rows: int, cols: int, **sim_overrides) -> TopologyConfig:
                 ))
 
     sim = SimulationConfig(
-        warmup_secs=5.0,
+        warmup_secs=15.0,
         duration_secs=60.0,
         traffic_interval_secs=8.0,
         advert_interval_secs=30.0,
@@ -155,7 +155,7 @@ def adversarial_config(mode: str, probability: float = 1.0, **adv_extras) -> Top
     """
     adv = AdversarialConfig(mode=mode, probability=probability, **adv_extras)
     sim = SimulationConfig(
-        warmup_secs=1.0,
+        warmup_secs=5.0,
         duration_secs=8.0,
         traffic_interval_secs=1.5,
         advert_interval_secs=30.0,

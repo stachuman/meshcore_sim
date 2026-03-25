@@ -395,23 +395,26 @@ class TestScenarioRfModel(unittest.TestCase):
 class TestSimRadioAirtimeConsistency(unittest.TestCase):
     """
     Cross-check SimRadio::getEstAirtimeFor (C++) against lora_airtime_ms()
-    (Python orchestrator) for SF10 / BW250 kHz / CR4-5.
+    (Python orchestrator).
 
-    All tests are pure Python; they replicate the formula documented in
-    SimRadio.cpp's comment.  A large discrepancy would mean the two sides of
-    the simulation are using inconsistent airtime models, which invalidates
-    the RF contention scenario results.
+    SimRadio now uses the same Semtech AN1200.13 formula as the orchestrator,
+    with EU Narrow defaults (SF8 / BW62.5 kHz / CR4-8).  These tests verify
+    the C++ and Python implementations stay in sync.  A large discrepancy
+    would mean the two sides of the simulation use inconsistent airtime
+    models, invalidating RF contention scenario results.
     """
 
-    # Mirrors SimRadio::getEstAirtimeFor (node_agent/SimRadio.cpp).
-    # Update these constants whenever the C++ formula changes.
-    _OVERHEAD_MS    = 103.0   # fixed preamble + header overhead
-    _MS_PER_BYTE    = 4.1     # per-payload-byte coefficient
+    # EU Narrow defaults matching SimRadio constructor (node_agent/SimRadio.h).
+    _SF    = 8
+    _BW_HZ = 62_500
+    _CR    = 4
 
     @classmethod
     def _sim_radio_airtime_ms(cls, len_bytes: int) -> float:
-        """Python replica of SimRadio::getEstAirtimeFor."""
-        return cls._OVERHEAD_MS + len_bytes * cls._MS_PER_BYTE
+        """Python replica of SimRadio::getEstAirtimeFor (Semtech AN1200.13)."""
+        from orchestrator.airtime import lora_airtime_ms
+        return lora_airtime_ms(sf=cls._SF, bw_hz=cls._BW_HZ, cr=cls._CR,
+                               payload_bytes=len_bytes)
 
     @staticmethod
     def _orchestrator_airtime_ms(len_bytes: int) -> float:
@@ -424,15 +427,17 @@ class TestSimRadioAirtimeConsistency(unittest.TestCase):
 
     def test_50_byte_airtime_in_plausible_range(self):
         """
-        getEstAirtimeFor(50) must be in [200, 500] ms.
+        getEstAirtimeFor(50) must be in [100, 800] ms.
 
         This is the most direct regression for the ×1000 bug:
         the buggy formula returned 6250 ms, which this test rejects.
+        The range covers EU Narrow (SF8/BW62.5k ≈ 509 ms) through
+        MeshCore US (SF10/BW250k ≈ 308 ms) configurations.
         """
         t = self._sim_radio_airtime_ms(50)
-        self.assertGreater(t, 200,
+        self.assertGreater(t, 100,
                            msg=f"SimRadio airtime too low: {t:.0f} ms for 50 B")
-        self.assertLess(t, 500,
+        self.assertLess(t, 800,
                         msg=f"SimRadio airtime too high: {t:.0f} ms for 50 B")
 
     def test_airtime_matches_orchestrator_within_factor_of_two(self):
@@ -470,39 +475,39 @@ class TestSimRadioAirtimeConsistency(unittest.TestCase):
 
     # -- derived delay bounds --
 
-    def test_baseline_retransmit_t_below_250ms(self):
+    def test_baseline_retransmit_t_below_1000ms(self):
         """
         The default Mesh::getRetransmitDelay computes:
             t = (getEstAirtimeFor(len) * 52 / 50) / 2
         and returns nextInt(0, 5) * t.
 
-        For a 50-byte packet t must be < 250 ms so the maximum baseline delay
-        stays below 1250 ms.  The ×1000 bug gave t ≈ 3250 ms and a maximum
-        delay of 16250 ms, completely hiding the adaptive agent's benefit.
+        For a 50-byte packet at EU Narrow (SF8/BW62.5k/CR4-8) t should be
+        in the hundreds of ms, NOT thousands.  The old ×1000 bug gave
+        t ≈ 3250 ms; this test catches that class of error.
         """
         airtime = self._sim_radio_airtime_ms(50)
         t = int(airtime * 52 // 50) // 2          # mirrors integer arithmetic in Mesh.cpp
         self.assertLess(
-            t, 250,
+            t, 1000,
             msg=f"Baseline retransmit t={t} ms is too large; check "
                 "SimRadio::getEstAirtimeFor for a factor-of-N error",
         )
 
     def test_adaptive_max_delay_exceeds_baseline_max_delay(self):
         """
-        For a 4-neighbor node, adaptive max delay = 5 × 330 ms × 1.3 = 2145 ms.
-        Baseline max delay = 5 × t ≈ 5 × 160 ms = 800 ms.
+        For a 4-neighbor node with the adaptive_delay experiment's density
+        table, adaptive max delay = 5 × airtime × 1.3.
+        Baseline max delay (upstream Mesh.cpp) = 5 × (airtime*52/50/2).
 
-        Adaptive must be strictly larger: that wider window is what reduces the
-        collision probability from ~39 % to ~14 % per transmitter pair.
+        Adaptive must be strictly larger: that wider window is what reduces
+        collision probability per transmitter pair.
         """
-        AIRTIME_MS         = 330.0
         TXDELAY_4_NEIGHBORS = 1.3
-        adaptive_max_ms = 5.0 * AIRTIME_MS * TXDELAY_4_NEIGHBORS   # 2145 ms
-
         baseline_airtime = self._sim_radio_airtime_ms(50)
+        adaptive_max_ms = 5.0 * baseline_airtime * TXDELAY_4_NEIGHBORS
+
         t = int(baseline_airtime * 52 // 50) // 2
-        baseline_max_ms = 5 * t                                      # ≈ 800 ms
+        baseline_max_ms = 5 * t
 
         self.assertGreater(
             adaptive_max_ms, baseline_max_ms,

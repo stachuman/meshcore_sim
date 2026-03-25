@@ -2,6 +2,10 @@
 #include <stdio.h>
 #include <string.h>
 #include <algorithm>
+#include <cmath>
+
+SimRadio::SimRadio(int sf, int bw_hz, int cr)
+    : _sf(sf), _bw_hz(bw_hz), _cr(cr) {}
 
 // --- hex helpers (local, no external deps) ---
 static const char HEX[] = "0123456789abcdef";
@@ -33,8 +37,17 @@ int SimRadio::recvRaw(uint8_t* bytes, int sz) {
 }
 
 uint32_t SimRadio::getEstAirtimeFor(int len_bytes) {
-    // LoRa SF7 BW125 approximation: ~8 bytes/ms at the air.
-    return (uint32_t)(len_bytes * 1000 / 8);
+    // Semtech AN1200.13 §4 — LoRa on-air time in milliseconds.
+    // Assumes explicit header and CRC enabled (MeshCore defaults).
+    double t_sym = (double)(1 << _sf) / (_bw_hz / 1000.0);  // ms
+    double t_pre = (8 + 4.25) * t_sym;  // 8 preamble symbols
+
+    int de = (t_sym >= 16.0) ? 1 : 0;  // low data-rate optimisation
+    double num = 8.0 * len_bytes - 4.0 * _sf + 44;  // +28 +16(CRC) -0(explicit hdr)
+    double den = 4.0 * (_sf - 2 * de);
+    int pay_sym = 8 + (int)std::max(std::ceil(num / den) * (_cr + 4), 0.0);
+
+    return (uint32_t)(t_pre + pay_sym * t_sym);
 }
 
 float SimRadio::packetScore(float snr, int /*packet_len*/) {

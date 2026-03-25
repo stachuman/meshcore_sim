@@ -16,7 +16,7 @@ from typing import Optional
 
 from .channel import ChannelModel
 from .cli import build_parser
-from .config import load_topology
+from .config import RadioConfig, load_topology
 from .metrics import MetricsCollector
 from .node import NodeAgent
 from .router import PacketRouter
@@ -54,7 +54,7 @@ async def run(args: object) -> int:
     # ------------------------------------------------------------------
     agents: dict[str, NodeAgent] = {}
     for node_cfg in topo_cfg.nodes:
-        agents[node_cfg.name] = NodeAgent(node_cfg, sim)
+        agents[node_cfg.name] = NodeAgent(node_cfg, sim, radio=topo_cfg.radio)
 
     log.info("Starting %d node agent(s) ...", len(agents))
     # Start agents in batches to avoid file-descriptor exhaustion on large
@@ -81,7 +81,10 @@ async def run(args: object) -> int:
     # RF physical-layer model (airtime / contention)
     # ------------------------------------------------------------------
     rf_model = args.rf_model  # type: ignore[attr-defined]
-    radio    = topo_cfg.radio if rf_model != "none" else None
+    # Always pass radio config to the router so airtime is recorded in
+    # traces (useful even without contention).  Fall back to EU Narrow
+    # defaults when the topology has no explicit radio section.
+    radio    = topo_cfg.radio or RadioConfig()
 
     if rf_model != "none" and topo_cfg.radio is None:
         log.warning(

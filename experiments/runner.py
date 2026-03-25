@@ -16,7 +16,7 @@ from dataclasses import dataclass, field
 from typing import Callable, Optional
 
 from orchestrator.channel import ChannelModel
-from orchestrator.config import TopologyConfig
+from orchestrator.config import RadioConfig, TopologyConfig
 from orchestrator.metrics import MetricsCollector
 from orchestrator.node import NodeAgent
 from orchestrator.packet import PAYLOAD_TYPE_TXT_MSG
@@ -170,6 +170,12 @@ class SimResult:
         return self.metrics.collision_count
 
     @property
+    def avg_relay_delay_ms(self) -> float:
+        """Mean relay retransmit delay in ms (0.0 if no relay events)."""
+        delays = self.tracer.compute_relay_delays()
+        return sum(delays) / len(delays) if delays else 0.0
+
+    @property
     def binary_name(self) -> str:
         """Basename of the binary (e.g. 'nexthop_agent')."""
         return os.path.basename(self.binary)
@@ -198,7 +204,8 @@ async def _run_async(
     topology = Topology(topo_cfg)
 
     agents: dict[str, NodeAgent] = {
-        n.name: NodeAgent(n, topo_cfg.simulation) for n in topo_cfg.nodes
+        n.name: NodeAgent(n, topo_cfg.simulation, radio=topo_cfg.radio)
+        for n in topo_cfg.nodes
     }
 
     # Start all agents (batch of 50 to avoid FD exhaustion on large grids).
@@ -209,7 +216,7 @@ async def _run_async(
     await asyncio.gather(*(a.wait_ready(timeout=15.0) for a in agents.values()))
 
     # Build RF model objects (mirrors orchestrator/__main__.py logic).
-    radio = topo_cfg.radio if scenario.rf_model != "none" else None
+    radio = topo_cfg.radio or RadioConfig()
     channel: Optional[ChannelModel] = None
     if scenario.rf_model == "contention" and radio is not None:
         neighbors_map = {

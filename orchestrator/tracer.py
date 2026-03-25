@@ -122,6 +122,8 @@ class PacketTracer:
         self._tx_counter: int = 0
         # tx_id → airtime_ms recorded at TX time (0.0 when not modelled)
         self._tx_airtime: dict[int, float] = {}
+        # tx_id → (sender, tx_time) for relay-delay computation
+        self._tx_events: dict[int, tuple[str, float]] = {}
 
     # ------------------------------------------------------------------
     # Recording
@@ -151,6 +153,7 @@ class PacketTracer:
             )
         self._tx_counter += 1
         self._tx_airtime[self._tx_counter] = airtime_ms
+        self._tx_events[self._tx_counter] = (sender, t)
         return self._tx_counter
 
     def record_collision(
@@ -239,6 +242,36 @@ class PacketTracer:
     def traces(self) -> dict[str, PacketTrace]:
         """All observed packet traces, keyed by fingerprint."""
         return dict(self._traces)
+
+    def compute_relay_delays(self) -> list[float]:
+        """Relay retransmit delays in ms (rx-to-tx gap for relay forwarding).
+
+        For each packet, finds nodes that received it and later retransmitted
+        it (excluding the packet's originator).  Returns a list of delay
+        values in milliseconds.
+        """
+        delays: list[float] = []
+        for trace in self._traces.values():
+            # Earliest time each node received this packet
+            first_rx: dict[str, float] = {}
+            tx_ids: set[int] = set()
+            for hop in trace.hops:
+                if hop.receiver not in first_rx or hop.t < first_rx[hop.receiver]:
+                    first_rx[hop.receiver] = hop.t
+                if hop.tx_id is not None:
+                    tx_ids.add(hop.tx_id)
+
+            # For each TX event, check if sender previously received this packet
+            for tx_id in tx_ids:
+                ev = self._tx_events.get(tx_id)
+                if ev is None:
+                    continue
+                sender, tx_time = ev
+                if sender in first_rx and sender != trace.first_sender:
+                    delay_ms = (tx_time - first_rx[sender]) * 1000.0
+                    if delay_ms >= 0:
+                        delays.append(delay_ms)
+        return delays
 
     def traces_by_type(self) -> dict[int, list[PacketTrace]]:
         """Group traces by payload type."""
@@ -394,6 +427,44 @@ class PacketTracer:
                 f"  {name:<16}  {len(trs):>5}  {avg_w:>13.1f}  {max_w:>13}"
             )
         lines.append("")
+
+        # --- Timing ---
+        all_airtimes = [h.airtime_ms for tr in self._traces.values()
+                        for h in tr.hops if h.airtime_ms > 0]
+        relay_delays = self.compute_relay_delays()
+        flood_props: list[float] = []
+        for tr in self._traces.values():
+            if tr.is_flood() and tr.hops:
+                span = (max(h.t for h in tr.hops) - tr.first_seen_at) * 1000.0
+                if span > 0:
+                    flood_props.append(span)
+
+        has_timing = all_airtimes or relay_delays or flood_props
+        if has_timing:
+            lines.append("  Timing:")
+            if all_airtimes:
+                avg_at = sum(all_airtimes) / len(all_airtimes)
+                lines.append(
+                    f"    Avg airtime per hop:       {avg_at:.1f} ms"
+                    f"  ({len(all_airtimes)} hops)"
+                )
+            if relay_delays:
+                lines.append(
+                    f"    Relay retransmit delay:    "
+                    f"min={min(relay_delays):.0f}ms  "
+                    f"avg={sum(relay_delays)/len(relay_delays):.0f}ms  "
+                    f"max={max(relay_delays):.0f}ms"
+                    f"  ({len(relay_delays)} relays)"
+                )
+            if flood_props:
+                lines.append(
+                    f"    Flood propagation time:    "
+                    f"min={min(flood_props):.0f}ms  "
+                    f"avg={sum(flood_props)/len(flood_props):.0f}ms  "
+                    f"max={max(flood_props):.0f}ms"
+                    f"  ({len(flood_props)} floods)"
+                )
+            lines.append("")
 
         # --- High-exposure packets (top 10 by witness count) ---
         sorted_traces = sorted(

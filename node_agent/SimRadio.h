@@ -24,7 +24,15 @@ class SimRadio : public mesh::Radio {
     float _last_rssi  = -100.0f;
     bool  _tx_pending = false;   // set by startSendRaw, cleared by isSendComplete
 
+    // LoRa radio parameters for airtime calculation (Semtech AN1200.13).
+    int _sf;      // spreading factor (7–12)
+    int _bw_hz;   // bandwidth in Hz
+    int _cr;      // coding-rate offset (1=CR4/5 … 4=CR4/8)
+
 public:
+    // Construct with LoRa parameters.  Defaults: EU Narrow (SF8/BW62.5/CR4-8).
+    SimRadio(int sf = 8, int bw_hz = 62500, int cr = 4);
+
     // Called by main.cpp to deliver a packet from the orchestrator.
     void enqueue(const uint8_t* data, int len, float snr, float rssi);
 

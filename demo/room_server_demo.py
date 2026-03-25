@@ -183,7 +183,8 @@ class RoomDemo:
         topology   = Topology(topo_cfg)
 
         self._agents = {
-            n.name: NodeAgent(n, topo_cfg.simulation) for n in topo_cfg.nodes
+            n.name: NodeAgent(n, topo_cfg.simulation, radio=topo_cfg.radio)
+            for n in topo_cfg.nodes
         }
 
         print(_c("bold", "\n  Starting 100 node processes …"), flush=True)

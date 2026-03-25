@@ -68,8 +68,8 @@ _SRC_NEIGHBOURS = frozenset({"n_0_1", "n_1_0"})
 async def _run_privacy_sim(
     *,
     rounds: int = 1,
-    warmup_secs: float = 3.0,
-    settle_secs: float = 2.5,
+    warmup_secs: float = 10.0,
+    settle_secs: float = 5.0,
     seed: int = 42,
 ) -> tuple[dict[str, NodeAgent], PacketTracer]:
     """
@@ -98,7 +98,8 @@ async def _run_privacy_sim(
     topology = Topology(topo_cfg)
 
     agents: dict[str, NodeAgent] = {
-        n.name: NodeAgent(n, topo_cfg.simulation) for n in topo_cfg.nodes
+        n.name: NodeAgent(n, topo_cfg.simulation, radio=topo_cfg.radio)
+        for n in topo_cfg.nodes
     }
     await asyncio.gather(*(a.start() for a in agents.values()))
     await asyncio.gather(*(a.wait_ready(timeout=15.0) for a in agents.values()))
@@ -366,7 +367,7 @@ class TestDirectRoutingPrivacyReduction(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.agents, cls.tracer = asyncio.run(
-            _run_privacy_sim(rounds=2, warmup_secs=3.0, settle_secs=3.0)
+            _run_privacy_sim(rounds=2, warmup_secs=10.0, settle_secs=5.0)
         )
         cls.txt_traces = _txt_traces(cls.tracer)
 

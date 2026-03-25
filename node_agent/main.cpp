@@ -156,6 +156,9 @@ int main(int argc, char* argv[]) {
     bool        is_room_svr  = false;
     const char* prv_hex      = nullptr;
     const char* node_name    = "node";
+    int         radio_sf     = 8;
+    int         radio_bw     = 62500;
+    int         radio_cr     = 4;
 
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--relay") == 0) {
@@ -166,13 +169,19 @@ int main(int argc, char* argv[]) {
             prv_hex = argv[++i];
         } else if (strcmp(argv[i], "--name") == 0 && i + 1 < argc) {
             node_name = argv[++i];
+        } else if (strcmp(argv[i], "--sf") == 0 && i + 1 < argc) {
+            radio_sf = atoi(argv[++i]);
+        } else if (strcmp(argv[i], "--bw") == 0 && i + 1 < argc) {
+            radio_bw = atoi(argv[++i]);
+        } else if (strcmp(argv[i], "--cr") == 0 && i + 1 < argc) {
+            radio_cr = atoi(argv[++i]);
         }
     }
 
     // -- Instantiate simulation objects --
     SimRNG   rng;
     SimClock clock;
-    SimRadio radio;
+    SimRadio radio(radio_sf, radio_bw, radio_cr);
 
     static const int POOL_SIZE = 16;
     StaticPoolPacketManager mgr(POOL_SIZE);
@@ -189,12 +198,16 @@ int main(int argc, char* argv[]) {
     }
     SimNode& node = *node_ptr;
 
-    // -- Initialise node identity --
+    // -- Seed RNG and initialise node identity --
     if (prv_hex && strlen(prv_hex) == PRV_KEY_SIZE * 2) {
         uint8_t prv[PRV_KEY_SIZE];
         hex_to_bytes(prv, prv_hex, PRV_KEY_SIZE * 2);
+        rng.seed(prv, PRV_KEY_SIZE);
         node.self_id.readFrom(prv, PRV_KEY_SIZE);
     } else {
+        // No --prv: seed from node name so each node gets a unique but
+        // deterministic identity (useful for reproducible test runs).
+        rng.seed((const uint8_t*)node_name, strlen(node_name));
         node.self_id = mesh::LocalIdentity(&rng);
     }
 

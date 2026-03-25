@@ -11,7 +11,7 @@ import sys
 from dataclasses import dataclass, field
 from typing import Awaitable, Callable, Optional
 
-from .config import NodeConfig, SimulationConfig
+from .config import NodeConfig, RadioConfig, SimulationConfig
 
 log = logging.getLogger(__name__)
 
@@ -58,9 +58,11 @@ class NodeAgent:
     and registers callbacks for TX and generic events.
     """
 
-    def __init__(self, config: NodeConfig, sim_config: SimulationConfig) -> None:
+    def __init__(self, config: NodeConfig, sim_config: SimulationConfig,
+                 radio: Optional[RadioConfig] = None) -> None:
         self.config = config
         self.sim_config = sim_config
+        self._radio = radio
         self.state = NodeState(name=config.name)
 
         self._proc: Optional[asyncio.subprocess.Process] = None
@@ -260,4 +262,8 @@ class NodeAgent:
         cmd += ["--name", self.config.name]
         if self.config.prv_key:
             cmd += ["--prv", self.config.prv_key]
+        if self._radio is not None:
+            cmd += ["--sf", str(self._radio.sf),
+                    "--bw", str(self._radio.bw_hz),
+                    "--cr", str(self._radio.cr)]
         return cmd

@@ -37,7 +37,7 @@ _HEX64 = re.compile(r"^[0-9a-fA-F]{64}$")
 async def _run_sim(
     topo_cfg: TopologyConfig,
     *,
-    extra_warmup: float = 0.5,
+    extra_warmup: float = 3.0,
 ) -> tuple[dict[str, NodeAgent], MetricsCollector]:
     """
     Spawn agents, run initial adverts, wait warmup + extra_warmup, generate
@@ -51,7 +51,7 @@ async def _run_sim(
     topology = Topology(topo_cfg)
 
     agents: dict[str, NodeAgent] = {
-        n.name: NodeAgent(n, topo_cfg.simulation)
+        n.name: NodeAgent(n, topo_cfg.simulation, radio=topo_cfg.radio)
         for n in topo_cfg.nodes
     }
     await asyncio.gather(*(a.start() for a in agents.values()))
@@ -70,11 +70,9 @@ async def _run_sim(
             await traffic._send_random(endpoints)
             await asyncio.sleep(0.2)
 
-    # Allow deliveries to propagate.  Use a generous window: node_agent
-    # processes poll stdin with a 1 ms select() timeout, so under load
-    # (e.g. running the full test suite) delivery can take much longer
-    # than the nominal zero latency.
-    await asyncio.sleep(2.0)
+    # Allow deliveries to propagate.  With non-zero retransmit delays a
+    # 2-hop message may take 3+ seconds to traverse the network.
+    await asyncio.sleep(5.0)
 
     await asyncio.gather(*(a.quit() for a in agents.values()), return_exceptions=True)
     return agents, metrics
@@ -89,7 +87,7 @@ class TestTwoNodeDirectSmoke(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cfg = two_node_direct_config(warmup_secs=0.5)
+        cfg = two_node_direct_config(warmup_secs=3.0)
         cls.agents, cls.metrics = asyncio.run(_run_sim(cfg))
 
     def test_both_nodes_ready(self):
@@ -140,11 +138,11 @@ class TestLinearThreeSmoke(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cfg = linear_three_config(
-            warmup_secs=2.0,
+            warmup_secs=5.0,
             duration_secs=15.0,
             traffic_interval_secs=2.0,
         )
-        cls.agents, cls.metrics = asyncio.run(_run_sim(cfg, extra_warmup=1.0))
+        cls.agents, cls.metrics = asyncio.run(_run_sim(cfg, extra_warmup=3.0))
 
     def test_all_three_agents_ready(self):
         for name, agent in self.agents.items():
@@ -193,7 +191,7 @@ class TestAdversarialDropSmoke(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cfg = adversarial_config("drop", probability=1.0)
-        cls.agents, cls.metrics = asyncio.run(_run_sim(cfg, extra_warmup=1.0))
+        cls.agents, cls.metrics = asyncio.run(_run_sim(cfg, extra_warmup=3.0))
 
     def test_adversarial_drops_recorded(self):
         self.assertGreater(
@@ -222,7 +220,7 @@ class TestAdversarialCorruptSmoke(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cfg = adversarial_config("corrupt", probability=1.0, corrupt_byte_count=2)
-        cls.agents, cls.metrics = asyncio.run(_run_sim(cfg, extra_warmup=1.0))
+        cls.agents, cls.metrics = asyncio.run(_run_sim(cfg, extra_warmup=3.0))
 
     def test_adversarial_corrupt_recorded(self):
         self.assertGreater(
@@ -245,7 +243,7 @@ class TestAdversarialReplaySmoke(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cfg = adversarial_config("replay", probability=1.0, replay_delay_ms=300.0)
-        cls.agents, cls.metrics = asyncio.run(_run_sim(cfg, extra_warmup=1.5))
+        cls.agents, cls.metrics = asyncio.run(_run_sim(cfg, extra_warmup=3.0))
 
     def test_adversarial_replays_recorded(self):
         self.assertGreater(
@@ -272,7 +270,7 @@ class TestPerfectLinkSmoke(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cfg = linear_three_config(
-            warmup_secs=2.0,
+            warmup_secs=5.0,
             duration_secs=15.0,
             traffic_interval_secs=2.0,
         )
@@ -280,7 +278,7 @@ class TestPerfectLinkSmoke(unittest.TestCase):
         for e in cfg.edges:
             e.loss = 0.0
             e.latency_ms = 0.0
-        cls.agents, cls.metrics = asyncio.run(_run_sim(cfg, extra_warmup=1.0))
+        cls.agents, cls.metrics = asyncio.run(_run_sim(cfg, extra_warmup=3.0))
 
     def test_zero_link_losses(self):
         self.assertEqual(self.metrics._link_loss_count, 0)

@@ -6,6 +6,12 @@ cryptography code** as a standalone subprocess; a Python orchestrator wires
 them together over simulated radio links with configurable loss, latency, SNR,
 RSSI, and adversarial behaviour.
 
+This is fork from meshcore_sim in which I put focus on simulating real time and collision topic, to be specific -
+One of the main mechanism to avoid collision is delay transmission, original simulator - to make results
+deterministic - skipped delay (and random) sending.
+
+Here - in this fork - I put focus on that aspect.
+
 ```
 alice ──(loss 5%, 20 ms)── relay1 ──(loss 5%, 20 ms)── bob
 ```
@@ -44,7 +50,7 @@ meshcore_sim/
 │   ├── main.cpp            select()-based stdin/stdout main loop
 │   ├── SimRadio.h/.cpp     Radio shim: rx queue in, tx JSON out
 │   ├── SimClock.h/.cpp     MillisecondClock + RTCClock (wall clock)
-│   ├── SimRNG.h/.cpp       RNG from /dev/urandom
+│   ├── SimRNG.h/.cpp       Deterministic PRNG (xoshiro256**)
 │   ├── SimNode.h/.cpp      Mesh subclass: routing policy, event callbacks
 │   ├── arduino_shim/       Minimal Arduino Stream stub
 │   └── crypto_shim/        SHA-256, AES-128, Ed25519 via OpenSSL 3.x EVP
@@ -215,7 +221,7 @@ experiments and measuring patch size.
 python3 -m sim_tests
 ```
 
-This runs all 345 tests:
+This runs all 393 tests:
 
 | Group | Count | Binary needed |
 |-------|------:|---------------|
@@ -517,10 +523,11 @@ An endpoint processes packets addressed to it but does not forward them.
 Every network needs at least one relay for nodes that are not directly
 adjacent to each other to communicate.
 
-**Fixed private keys.** If `prv_key` is omitted, the node generates a random
-Ed25519 keypair on startup (from `/dev/urandom`), so its public key changes
-on every run.  Provide a fixed key when you need deterministic public keys
-across runs — for example, to pre-seed a contact list in a test harness.
+**Fixed private keys.** If `prv_key` is omitted, the node derives a
+deterministic Ed25519 keypair from its `name` using a seeded PRNG
+(xoshiro256**), so the same name always produces the same identity within a
+given build.  Provide a fixed key when you need stable public keys across
+different builds or node_agent versions.
 The key format is `seed[32 bytes] || public_key[32 bytes]` concatenated and
 hex-encoded (128 characters), which is the convention used by the
 [orlp/ed25519](https://github.com/nicowillis/ed25519) library vendored inside
@@ -594,9 +601,12 @@ reach `deep_valley` at all.
 
 ### `radio`
 
-An optional object that specifies LoRa physical-layer parameters.  Required
-when using `--rf-model airtime` or `--rf-model contention`; silently ignored
-with `--rf-model none` (the default).
+An optional object that specifies LoRa physical-layer parameters.  When
+present, these parameters are passed to each node agent subprocess (via
+`--sf`, `--bw`, `--cr` flags) for accurate C++ airtime estimation, and are
+used by the orchestrator for airtime calculations in traces and the RF
+contention model.  When absent, EU Narrow defaults (SF8/BW62.5 kHz/CR4-8)
+are used.
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
@@ -839,7 +849,8 @@ The binary links directly against the MeshCore C++ source (compiled from the
   queue fed by the orchestrator; `startSendRaw()` writes a JSON `tx` event to
   stdout.
 - **SimClock** — wall-clock backed `MillisecondClock` and `RTCClock`.
-- **SimRNG** — reads from `/dev/urandom`.
+- **SimRNG** — deterministic xoshiro256** PRNG, seeded from `--prv` key
+  bytes or from the node name when no key is provided.
 - **crypto shims** — drop-in replacements for the Arduino Crypto library
   classes (`SHA256`, `AES128`, `Ed25519`) backed by OpenSSL 3.x EVP.
 
@@ -867,7 +878,7 @@ a deliberate choice for the privacy research goal:
 | Send retry with timeout | ✅ | ✗ | `sendTextTo` is fire-and-forget |
 | Reciprocal PATH on `onPeerPathRecv` returning true | ✅ | ✗ | omitted for simplicity |
 | `sendFloodScoped` (directional flood filter) | ✅ | ✗ | plain `sendFlood` used instead |
-| Zero retransmit jitter | ✗ | ✅ | `getRetransmitDelay` overridden to 0 |
+| Real retransmit delay | ✅ | ✅ | MeshCore's `getRetransmitDelay` runs (airtime-proportional jitter) |
 | Room-server forwarding | ✗ | ✅ | `RoomServerNode` subclass re-broadcasts TXT_MSG to all contacts |
 
 **Path exchange** (the mechanism that turns a flood-routed first message into
@@ -890,13 +901,16 @@ and instrument.  Future privacy experiments (per-hop re-encryption, path
 hiding, onion layers) will modify or replace exactly this logic without
 touching the MeshCore submodule.
 
-**Zero retransmit jitter** (`getRetransmitDelay` returns 0) is essential for
-test determinism.  The default MeshCore implementation returns a random delay
-proportional to estimated airtime — up to ~10 seconds per hop for typical
-packet sizes.  In a multi-hop grid, full flood propagation could take minutes
-under the default setting, making tests impractically slow.  Setting jitter to
-zero means floods propagate as fast as the per-link `latency_ms` and the
-Python asyncio scheduler allow.
+**Real retransmit delays** — `SimNode` does **not** override
+`getRetransmitDelay`, so the real MeshCore delay formula runs: each relay
+draws a random jitter proportional to the estimated on-air time of the
+packet.  `SimRadio::getEstAirtimeFor()` uses the Semtech AN1200.13 formula
+(matching `orchestrator/airtime.py`) with radio parameters passed via the
+`--sf`, `--bw`, `--cr` CLI flags (defaults: SF8/BW62.5 kHz/CR4-8).
+When compiled against a MeshCore fork that provides
+`helpers/DelayTuning.h`, `SimNode::onAdvertRecv()` also calls
+`autoTuneByNeighborCount()` to adjust the delay scaling factor based on
+local density (guarded by `#if __has_include(<helpers/DelayTuning.h>)`).
 
 ### Wire protocol
 
