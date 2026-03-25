@@ -12,5 +12,7 @@ venv/
 node_agent/build/
 tests/build/
 
+trace.json
+
 # macOS
 .DS_Store
