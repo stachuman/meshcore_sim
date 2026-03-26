@@ -256,7 +256,6 @@ Integration tests are automatically **skipped** (not failed) when the
 | **[SIMULATION.md](SIMULATION.md)** | Full technical reference: architecture, components, RF model, lifecycle, what's real vs simulated, known limitations |
 | **[MISSING_FEATURES.md](MISSING_FEATURES.md)** | Feature gap analysis: what MeshCore features are/aren't simulated, with priority assessment and CR coding-gain analysis |
 | **[EXAMPLES.md](EXAMPLES.md)** | Worked example simulations with commands and expected output |
-| **[PLAN.md](PLAN.md)** | Research plan for privacy-preserving routing experiments |
 | **[PROPOSAL_AUTOTUNE.md](PROPOSAL_AUTOTUNE.md)** | Proposal for exercising density-adaptive delay tuning |
 | **[QUICKSTART_COLLISIONS.md](QUICKSTART_COLLISIONS.md)** | Quick start for collision-avoidance experiments |
 | **[node_agent/README.md](node_agent/README.md)** | C++ build instructions, wire protocol reference |
