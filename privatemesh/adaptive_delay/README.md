@@ -121,9 +121,9 @@ Save traces for visualisation:
 python3 -m experiments \
     --scenario grid/3x3/contention \
     --trace-out-dir /tmp/adaptive_traces
-python3 -m viz /tmp/adaptive_traces/grid_3x3_contention_topology.json \
+python3 -m workbench /tmp/adaptive_traces/grid_3x3_contention_topology.json \
               --trace /tmp/adaptive_traces/grid_3x3_contention_node_agent_trace.json
-python3 -m viz /tmp/adaptive_traces/grid_3x3_contention_topology.json \
+python3 -m workbench /tmp/adaptive_traces/grid_3x3_contention_topology.json \
               --trace /tmp/adaptive_traces/grid_3x3_contention_adaptive_agent_trace.json
 ```
 

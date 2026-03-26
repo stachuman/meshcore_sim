@@ -131,8 +131,9 @@ node_agent/
 ├── SimRadio.h / .cpp      # Radio impl: recvRaw() from queue, startSendRaw() → stdout
 ├── SimClock.h / .cpp      # MillisecondClock + RTCClock backed by wall clock
 ├── SimRNG.h   / .cpp      # Deterministic PRNG (xoshiro256**, seeded from --prv or name)
-├── SimNode.h  / .cpp      # Mesh subclass: routing policy, event callbacks
+├── SimNode.h  / .cpp      # BaseChatMesh subclass: ACK/retry, event callbacks
 ├── arduino_shim/
+│   ├── Arduino.h          # Minimal Arduino.h shim (ltoa, stdint)
 │   └── Stream.h           # Minimal Arduino Stream stub (~50 lines)
 └── crypto_shim/
     ├── SHA256.h / .cpp    # SHA-256 and HMAC-SHA-256 via OpenSSL 3 EVP_MAC
@@ -142,8 +143,10 @@ node_agent/
 
 MeshCore source files compiled in (from `../MeshCore/src/`):
 `Packet.cpp`, `Dispatcher.cpp`, `Mesh.cpp`, `Utils.cpp`, `Identity.cpp`,
-`helpers/StaticPoolPacketManager.cpp`, and the portable `lib/ed25519/*.c`
-implementation.  **No changes to MeshCore source are required.**
+`helpers/StaticPoolPacketManager.cpp`, `helpers/BaseChatMesh.cpp`,
+`helpers/TxtDataHelpers.cpp`, `helpers/AdvertDataHelpers.cpp`,
+and the portable `lib/ed25519/*.c` implementation.
+**No changes to MeshCore source are required.**
 
 ---
 

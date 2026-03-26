@@ -16,8 +16,9 @@ struct IncomingPacket {
 // recvRaw()      – pops one packet from the inbound queue populated by enqueue().
 // startSendRaw() – writes a JSON "tx" line to stdout and returns immediately
 //                  (the orchestrator decides if/when neighbours receive it).
-// isSendComplete()– returns true on the very next call after startSendRaw(),
-//                  modelling a zero-latency (from the node's perspective) transmit.
+// isSendComplete()– returns true only after the estimated on-air time has
+//                  elapsed (wall-clock), enabling the Dispatcher's duty-cycle
+//                  enforcement and realistic half-duplex timing.
 class SimRadio : public mesh::Radio {
     std::queue<IncomingPacket> _rx_queue;
     float _last_snr   = 0.0f;
@@ -29,9 +30,16 @@ class SimRadio : public mesh::Radio {
     int _bw_hz;   // bandwidth in Hz
     int _cr;      // coding-rate offset (1=CR4/5 … 4=CR4/8)
 
+    // Clock for realistic TX timing — isSendComplete() waits until the
+    // estimated on-air time has elapsed before returning true.
+    mesh::MillisecondClock& _ms;
+    unsigned long _tx_done_at = 0;
+
 public:
-    // Construct with LoRa parameters.  Defaults: EU Narrow (SF8/BW62.5/CR4-8).
-    SimRadio(int sf = 8, int bw_hz = 62500, int cr = 4);
+    // Construct with LoRa parameters and clock.
+    // Defaults: EU Narrow (SF8/BW62.5/CR4-8).
+    SimRadio(mesh::MillisecondClock& ms,
+             int sf = 8, int bw_hz = 62500, int cr = 4);
 
     // Called by main.cpp to deliver a packet from the orchestrator.
     void enqueue(const uint8_t* data, int len, float snr, float rssi);

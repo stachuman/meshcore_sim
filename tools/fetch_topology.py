@@ -468,7 +468,7 @@ def main() -> None:
     radio = parser.add_argument_group(
         "radio parameters",
         "LoRa radio configuration written into the 'radio' section of the output JSON. "
-        "Used by --rf-model airtime/contention when running the simulator. "
+        "Used by the simulator for airtime and collision detection. "
         f"Defaults match MeshCore source (SF{_DEFAULT_SF} / BW{_DEFAULT_BW_HZ//1000} kHz / CR4/5).",
     )
     radio.add_argument(

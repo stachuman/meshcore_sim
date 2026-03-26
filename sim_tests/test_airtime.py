@@ -200,5 +200,51 @@ class TestChannelModelCaptureEffect(unittest.TestCase):
         self.assertTrue(m_hard.is_lost("A", "R", 0.0, 0.3, tx_id=1))
 
 
+# ---------------------------------------------------------------------------
+# ChannelModel — half-duplex (receiver busy during own TX)
+# ---------------------------------------------------------------------------
+
+class TestChannelModelHalfDuplex(unittest.TestCase):
+    """LoRa is half-duplex: a node cannot receive while it is transmitting."""
+
+    def _model(self, neighbors: dict) -> ChannelModel:
+        return ChannelModel(neighbors=neighbors, positions=None)
+
+    def test_receiver_busy_during_own_tx(self):
+        """R transmits [0.0, 0.5]; RX window [0.1, 0.4] fully inside → busy."""
+        m = self._model({"A": {"R"}, "R": {"A"}})
+        m.register_tx("R", 0.0, 0.5, tx_id=1)
+        self.assertTrue(m.is_receiver_busy("R", 0.1, 0.4))
+
+    def test_receiver_idle(self):
+        """No active TX from R → not busy."""
+        m = self._model({"A": {"R"}})
+        self.assertFalse(m.is_receiver_busy("R", 0.1, 0.4))
+
+    def test_partial_overlap_start(self):
+        """R TX [0.0, 0.3]; RX window [0.2, 0.6] overlaps at the start."""
+        m = self._model({"A": {"R"}, "R": {"A"}})
+        m.register_tx("R", 0.0, 0.3, tx_id=1)
+        self.assertTrue(m.is_receiver_busy("R", 0.2, 0.6))
+
+    def test_partial_overlap_end(self):
+        """R TX [0.4, 0.7]; RX window [0.2, 0.6] overlaps at the end."""
+        m = self._model({"A": {"R"}, "R": {"A"}})
+        m.register_tx("R", 0.4, 0.7, tx_id=1)
+        self.assertTrue(m.is_receiver_busy("R", 0.2, 0.6))
+
+    def test_no_overlap_touching(self):
+        """R TX [0.0, 0.3]; RX window [0.3, 0.6] — touching but not overlapping."""
+        m = self._model({"A": {"R"}, "R": {"A"}})
+        m.register_tx("R", 0.0, 0.3, tx_id=1)
+        self.assertFalse(m.is_receiver_busy("R", 0.3, 0.6))
+
+    def test_other_node_tx_ignored(self):
+        """A transmits but R does not → R is not busy."""
+        m = self._model({"A": {"R"}, "R": {"A"}})
+        m.register_tx("A", 0.0, 0.5, tx_id=1)
+        self.assertFalse(m.is_receiver_busy("R", 0.1, 0.4))
+
+
 if __name__ == "__main__":
     unittest.main()

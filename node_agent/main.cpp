@@ -181,7 +181,7 @@ int main(int argc, char* argv[]) {
     // -- Instantiate simulation objects --
     SimRNG   rng;
     SimClock clock;
-    SimRadio radio(radio_sf, radio_bw, radio_cr);
+    SimRadio radio(clock, radio_sf, radio_bw, radio_cr);
 
     static const int POOL_SIZE = 16;
     StaticPoolPacketManager mgr(POOL_SIZE);

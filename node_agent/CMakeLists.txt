@@ -29,6 +29,9 @@ set(MESHCORE_CORE_SOURCES
     ${MESHCORE_SRC}/Utils.cpp
     ${MESHCORE_SRC}/Identity.cpp
     ${MESHCORE_SRC}/helpers/StaticPoolPacketManager.cpp
+    ${MESHCORE_SRC}/helpers/BaseChatMesh.cpp
+    ${MESHCORE_SRC}/helpers/TxtDataHelpers.cpp
+    ${MESHCORE_SRC}/helpers/AdvertDataHelpers.cpp
 )
 
 # ---------------------------------------------------------------------------

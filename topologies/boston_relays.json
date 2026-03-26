@@ -1,4 +1,10 @@
 {
+  "radio": {
+    "sf": 10,
+    "bw_hz": 250000,
+    "cr": 1,
+    "preamble_symbols": 8
+  },
   "nodes": [
     {
       "name": "6484218DC3F4A61F5109871ED5581FF928D6A5C12129E86FAE8DFD56E974C786",

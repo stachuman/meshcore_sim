@@ -16,10 +16,8 @@ Examples
 
 # Save trace files for visualisation:
     python3 -m experiments --scenario grid/10x10 --trace-out-dir /tmp/traces
-    python3 -m viz /tmp/traces/grid_10x10_topology.json \\
+    python3 -m workbench /tmp/traces/grid_10x10_topology.json \\
                   --trace /tmp/traces/grid_10x10_node_agent_trace.json
-    python3 -m viz /tmp/traces/grid_10x10_topology.json \\
-                  --trace /tmp/traces/grid_10x10_nexthop_agent_trace.json
 
 # List available scenarios:
     python3 -m experiments --list
@@ -91,7 +89,7 @@ def main(argv: list[str] | None = None) -> int:
             "Write PacketTracer JSON and topology JSON to DIR after each run. "
             "Files are named <scenario_slug>_<binary>_trace.json and "
             "<scenario_slug>_topology.json.  Load them with: "
-            "python3 -m viz <DIR>/<slug>_topology.json "
+            "python3 -m workbench <DIR>/<slug>_topology.json "
             "--trace <DIR>/<slug>_<binary>_trace.json"
         ),
     )
@@ -179,7 +177,7 @@ def main(argv: list[str] | None = None) -> int:
                 binary_slug = os.path.basename(r.binary)
                 topo_path = os.path.join(trace_dir, f"{slug}_topology.json")
                 trace_path = os.path.join(trace_dir, f"{slug}_{binary_slug}_trace.json")
-                print(f"  python3 -m viz {topo_path} --trace {trace_path}")
+                print(f"  python3 -m workbench {topo_path} --trace {trace_path}")
 
         if len(results) >= 2:
             compare(results, scenario_name=scenario.name).print()

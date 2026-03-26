@@ -5,7 +5,7 @@ the exact commands, and what to look for in the output.
 
 All commands are run from the repository root.  The node agent must be built
 first (`cd node_agent && cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build && cd ..`).
-The visualiser requires `pip install -r requirements.txt`.
+The workbench requires `pip install nicegui`.
 
 ---
 
@@ -28,7 +28,7 @@ python3 -m orchestrator topologies/linear_three.json \
 **Visualise the static topology:**
 
 ```sh
-python3 -m viz topologies/linear_three.json
+python3 -m workbench topologies/linear_three.json
 ```
 
 ---
@@ -44,7 +44,7 @@ python3 -m orchestrator topologies/linear_three.json \
     --trace-out /tmp/linear_trace.json
 
 # Open the visualiser with the trace overlay
-python3 -m viz topologies/linear_three.json \
+python3 -m workbench topologies/linear_three.json \
     --trace /tmp/linear_trace.json
 ```
 
@@ -146,7 +146,7 @@ python3 -m orchestrator topologies/asymmetric_hill.json --duration 120
 - RX counts in the metrics table reflect the asymmetry clearly.
 
 ```sh
-python3 -m viz topologies/asymmetric_hill.json
+python3 -m workbench topologies/asymmetric_hill.json
 ```
 
 The force-directed layout in the visualiser does not model RF range, but
@@ -175,7 +175,7 @@ python3 -m orchestrator topologies/grid_10x10.json \
 **Visualise:**
 
 ```sh
-python3 -m viz topologies/grid_10x10.json --trace /tmp/grid_trace.json
+python3 -m workbench topologies/grid_10x10.json --trace /tmp/grid_trace.json
 ```
 
 - Enable **Animate broadcast steps** and press Play to watch the flood
@@ -248,7 +248,7 @@ python3 -m orchestrator topologies/grid_10x10.json \
 **Visualise collisions:**
 
 ```sh
-python3 -m viz topologies/grid_10x10.json \
+python3 -m workbench topologies/grid_10x10.json \
     --trace /tmp/grid_collision_trace.json
 ```
 
@@ -294,7 +294,7 @@ python3 -m orchestrator topologies/boston_live.json \
     --trace-out /tmp/boston_trace.json
 
 # Visualise on the real map (nodes have lat/lon from the live data):
-python3 -m viz topologies/boston_live.json --trace /tmp/boston_trace.json
+python3 -m workbench topologies/boston_live.json --trace /tmp/boston_trace.json
 ```
 
 A pre-fetched snapshot is included at `topologies/boston_relays.json`:
@@ -303,7 +303,7 @@ A pre-fetched snapshot is included at `topologies/boston_relays.json`:
 python3 -m orchestrator topologies/boston_relays.json \
     --duration 120 --seed 42 \
     --trace-out /tmp/boston_trace.json
-python3 -m viz topologies/boston_relays.json --trace /tmp/boston_trace.json
+python3 -m workbench topologies/boston_relays.json --trace /tmp/boston_trace.json
 ```
 
 **What to look for:**
@@ -325,7 +325,7 @@ python3 -m orchestrator topologies/boston_relays.json \
     --duration 120 --seed 42 \
     --rf-model contention \
     --trace-out /tmp/boston_contention_trace.json
-python3 -m viz topologies/boston_relays.json \
+python3 -m workbench topologies/boston_relays.json \
     --trace /tmp/boston_contention_trace.json
 ```
 
@@ -406,7 +406,7 @@ Inspect the **Packet Path Trace** section at the end of the report:
 **Visualise the witness heatmap:**
 
 ```sh
-python3 -m viz topologies/grid_10x10.json --trace /tmp/privacy_trace.json
+python3 -m workbench topologies/grid_10x10.json --trace /tmp/privacy_trace.json
 ```
 
 The heatmap tab shows each node's total witness count: interior relays near
@@ -445,7 +445,7 @@ python3 -m orchestrator /tmp/grid_20x20.json \
     --duration 120 --seed 1 \
     --rf-model contention \
     --trace-out /tmp/grid_20x20_trace.json
-python3 -m viz /tmp/grid_20x20.json --trace /tmp/grid_20x20_trace.json
+python3 -m workbench /tmp/grid_20x20.json --trace /tmp/grid_20x20_trace.json
 ```
 
 ---

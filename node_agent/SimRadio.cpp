@@ -4,8 +4,8 @@
 #include <algorithm>
 #include <cmath>
 
-SimRadio::SimRadio(int sf, int bw_hz, int cr)
-    : _sf(sf), _bw_hz(bw_hz), _cr(cr) {}
+SimRadio::SimRadio(mesh::MillisecondClock& ms, int sf, int bw_hz, int cr)
+    : _sf(sf), _bw_hz(bw_hz), _cr(cr), _ms(ms) {}
 
 // --- hex helpers (local, no external deps) ---
 static const char HEX[] = "0123456789abcdef";
@@ -50,11 +50,20 @@ uint32_t SimRadio::getEstAirtimeFor(int len_bytes) {
     return (uint32_t)(t_pre + pay_sym * t_sym);
 }
 
-float SimRadio::packetScore(float snr, int /*packet_len*/) {
-    // Map SNR to a 0..1 score used by Dispatcher to decide retransmit delay.
-    // Good SNR (≥ 10 dB) → 1.0; marginal (≤ -5 dB) → 0.0.
-    float clamped = snr < -5.0f ? -5.0f : (snr > 10.0f ? 10.0f : snr);
-    return (clamped + 5.0f) / 15.0f;
+float SimRadio::packetScore(float snr, int packet_len) {
+    // Matches RadioLibWrapper::packetScoreInt() from MeshCore.
+    // SF-dependent SNR threshold from Semtech datasheets; score drives
+    // Dispatcher::calcRxDelay() which controls relay retransmit priority.
+    static const float snr_threshold[] = {
+        -7.5f, -10.0f, -12.5f, -15.0f, -17.5f, -20.0f  // SF7..SF12
+    };
+    if (_sf < 7) return 0.0f;
+    float thr = snr_threshold[_sf - 7];
+    if (snr < thr) return 0.0f;
+    float snr_part = (snr - thr) / 10.0f;
+    float len_part = 1.0f - (packet_len / 256.0f);
+    float score = snr_part * len_part;
+    return score < 0.0f ? 0.0f : (score > 1.0f ? 1.0f : score);
 }
 
 bool SimRadio::startSendRaw(const uint8_t* bytes, int len) {
@@ -65,13 +74,13 @@ bool SimRadio::startSendRaw(const uint8_t* bytes, int len) {
     fprintf(stdout, "{\"type\":\"tx\",\"hex\":\"%s\"}\n", hex_buf);
     fflush(stdout);
     _tx_pending = true;
+    _tx_done_at = _ms.getMillis() + getEstAirtimeFor(len);
     return true;
 }
 
 bool SimRadio::isSendComplete() {
-    if (_tx_pending) {
-        _tx_pending = false;
-        return true;
-    }
-    return false;
+    if (!_tx_pending) return false;
+    if (_ms.getMillis() < _tx_done_at) return false;  // still on air
+    _tx_pending = false;
+    return true;
 }

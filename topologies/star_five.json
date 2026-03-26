@@ -1,5 +1,11 @@
 {
   "_comment": "Hub-and-spoke: four endpoints all connect through one central relay",
+  "radio": {
+    "sf": 8,
+    "bw_hz": 250000,
+    "cr": 4,
+    "preamble_symbols": 8
+  },
   "nodes": [
     { "name": "hub",    "relay": true  },
     { "name": "alpha",  "relay": false },

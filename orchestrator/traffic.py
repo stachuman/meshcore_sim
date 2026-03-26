@@ -10,7 +10,8 @@ import random
 import time
 from typing import Optional
 
-from .config import SimulationConfig
+from .airtime import advert_stagger_secs
+from .config import RadioConfig, SimulationConfig
 from .metrics import MetricsCollector
 from .node import NodeAgent
 from .topology import Topology
@@ -26,6 +27,7 @@ class TrafficGenerator:
         sim_config: SimulationConfig,
         metrics: MetricsCollector,
         rng: random.Random,
+        radio: RadioConfig | None = None,
     ) -> None:
         self._agents = agents
         self._topology = topology
@@ -34,25 +36,33 @@ class TrafficGenerator:
         self._rng = rng
         self._endpoint_pubs: Optional[set[str]] = None
 
+        # Auto-compute stagger from radio config and node count so that
+        # initial adverts don't collide under the hard-collision RF model.
+        if radio is not None:
+            self._stagger_secs = advert_stagger_secs(
+                radio.sf, radio.bw_hz, radio.cr, len(agents),
+                radio.preamble_symbols)
+        else:
+            self._stagger_secs = 1.0
+
     # ------------------------------------------------------------------
     # Advertisement flooding
     # ------------------------------------------------------------------
 
-    async def run_initial_adverts(self, stagger_secs: float = 1.0) -> None:
-        """Flood advertisements from all nodes once, staggered over ~stagger_secs.
+    async def run_initial_adverts(self, stagger_secs: float | None = None) -> None:
+        """Flood advertisements from all nodes once, staggered over a time window.
 
         Parameters
         ----------
         stagger_secs:
-            Width of the uniform-random stagger window in seconds.  The default
-            of 1.0 s works well for small networks with no RF contention model.
-            For hard-collision scenarios with many nodes, use a wider value
-            (e.g. 5.0 s for a 9-node grid) so simultaneous transmissions —
-            which are collided and lost — are rare enough that every node can
-            get at least one advert through per round.
+            Width of the uniform-random stagger window in seconds.  When
+            ``None`` (default), the auto-computed value based on radio config
+            and node count is used — this ensures adverts don't collide in the
+            hard-collision RF model.  Pass an explicit value to override.
         """
+        stagger = stagger_secs if stagger_secs is not None else self._stagger_secs
         tasks = [
-            self._delayed_advert(agent, self._rng.uniform(0.0, stagger_secs))
+            self._delayed_advert(agent, self._rng.uniform(0.0, stagger))
             for agent in self._agents.values()
         ]
         await asyncio.gather(*tasks)
@@ -77,6 +87,9 @@ class TrafficGenerator:
         """
         After warmup_secs, generate Poisson-distributed random text messages
         between endpoint pairs that have already exchanged advertisements.
+
+        Stops sending new messages after duration_secs so that the grace
+        period (handled by the wall-clock timer) can drain in-flight ACKs.
         """
         await asyncio.sleep(self._sim.warmup_secs)
         log.info("[traffic] warmup complete — starting random text sends")
@@ -86,11 +99,16 @@ class TrafficGenerator:
             log.warning("[traffic] fewer than 2 endpoints; no text traffic will be generated")
             return
 
-        while True:
+        loop = asyncio.get_event_loop()
+        deadline = loop.time() + self._sim.duration_secs
+        while loop.time() < deadline:
             # Exponential inter-arrival for Poisson traffic
             wait = self._rng.expovariate(1.0 / self._sim.traffic_interval_secs)
             await asyncio.sleep(wait)
+            if loop.time() >= deadline:
+                break
             await self._send_random(endpoints)
+        log.info("[traffic] traffic window closed — grace period for in-flight messages")
 
     async def _send_random(self, endpoints: list[str]) -> None:
         sender_name = self._rng.choice(endpoints)

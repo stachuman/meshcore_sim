@@ -1,64 +1,74 @@
 #pragma once
-#include <Mesh.h>
-#include <vector>
+#include <helpers/BaseChatMesh.h>
 #include <string>
 #include <cstdint>
+#include <memory>
 
-// A known peer whose Advert we have received.
-struct Contact {
-    mesh::Identity  id;
-    uint8_t         shared_secret[PUB_KEY_SIZE];  // ECDH with our private key
-    bool            has_path   = false;
-    std::vector<uint8_t> path; // direct path bytes (if known)
-    std::string     name;      // from advert app_data (null-terminated string)
-};
-
-// Concrete Mesh subclass used by the simulator.
+// Concrete BaseChatMesh subclass used by the simulator.
+//
+// Inherits the full MeshCore chat stack: contact management, ACK tracking,
+// timeout/retry, path exchange, and group channel support.  The pure-virtual
+// "UI" hooks emit newline-delimited JSON to stdout for the orchestrator.
 //
 // Routing behaviour is controlled by the --relay flag at startup:
 //   relay       – forwards flood packets it hasn't seen before (repeater node)
 //   endpoint    – does not forward packets (leaf node)
 //   room-server – endpoint that re-broadcasts received TXT_MSG to all contacts
-//
-// All notable events (received messages, new adverts, tx/rx) are reported to
-// the orchestrator as newline-delimited JSON written to stdout.
-class SimNode : public mesh::Mesh {
+class SimNode : public BaseChatMesh {
     bool _is_relay;
 
-protected:
-    // Contact list and peer-search scratch space — accessible to subclasses.
-    std::vector<Contact> _contacts;
-    std::vector<int>     _search_results;
+    // Pending message for ACK tracking and retry.
+    struct PendingMsg {
+        uint32_t expected_ack;
+        std::string dest_pub_hex;
+        std::string text;
+        int attempt;
+    };
+    std::unique_ptr<PendingMsg> _pending_msg;
 
-    // Emit a JSON log line to stdout (does NOT interfere with tx lines).
+    static constexpr int ACK_MAX_RETRIES = 3;
+
+protected:
+    // Emit a JSON log line to stdout.
     void emitLog(const char* fmt, ...) const;
     // Emit an arbitrary JSON object line.
     void emitJson(const char* json) const;
 
+    // ---- Mesh routing overrides ----
+    bool allowPacketForward(const mesh::Packet* packet) override;
+    uint32_t getRetransmitDelay(const mesh::Packet* packet) override;
+    uint32_t getDirectRetransmitDelay(const mesh::Packet* packet) override;
 
-    // ---- mesh::Mesh overrides ----
-    bool     allowPacketForward(const mesh::Packet* packet) override;
-    int      searchPeersByHash(const uint8_t* hash) override;
-    void     getPeerSharedSecret(uint8_t* dest_secret, int peer_idx) override;
+    // ---- BaseChatMesh "UI" pure virtuals ----
+    void onDiscoveredContact(ContactInfo& contact, bool is_new,
+                             uint8_t path_len, const uint8_t* path) override;
+    ContactInfo* processAck(const uint8_t* data) override;
+    void onContactPathUpdated(const ContactInfo& contact) override;
+    void onMessageRecv(const ContactInfo& contact, mesh::Packet* pkt,
+                       uint32_t sender_timestamp, const char* text) override;
+    void onCommandDataRecv(const ContactInfo& contact, mesh::Packet* pkt,
+                           uint32_t sender_timestamp, const char* text) override;
+    void onSignedMessageRecv(const ContactInfo& contact, mesh::Packet* pkt,
+                             uint32_t sender_timestamp,
+                             const uint8_t* sender_prefix,
+                             const char* text) override;
+    uint32_t calcFloodTimeoutMillisFor(uint32_t pkt_airtime_millis) const override;
+    uint32_t calcDirectTimeoutMillisFor(uint32_t pkt_airtime_millis,
+                                        uint8_t path_len) const override;
+    void onSendTimeout() override;
+    void onChannelMessageRecv(const mesh::GroupChannel& channel,
+                              mesh::Packet* pkt, uint32_t timestamp,
+                              const char* text) override;
+    uint8_t onContactRequest(const ContactInfo& contact,
+                             uint32_t sender_timestamp,
+                             const uint8_t* data, uint8_t len,
+                             uint8_t* reply) override;
+    void onContactResponse(const ContactInfo& contact,
+                           const uint8_t* data, uint8_t len) override;
 
-    void  onPeerDataRecv(mesh::Packet* packet, uint8_t type,
-                         int sender_idx, const uint8_t* secret,
-                         uint8_t* data, size_t len) override;
-
-    bool  onPeerPathRecv(mesh::Packet* packet, int sender_idx,
-                         const uint8_t* secret,
-                         uint8_t* path, uint8_t path_len,
-                         uint8_t extra_type, uint8_t* extra,
-                         uint8_t extra_len) override;
-
-    void  onAdvertRecv(mesh::Packet* packet, const mesh::Identity& id,
-                       uint32_t timestamp,
-                       const uint8_t* app_data, size_t app_data_len) override;
-
-    void  onAckRecv(mesh::Packet* packet, uint32_t ack_crc) override;
-
-    void  logRx(mesh::Packet* packet, int len, float score) override;
-    void  logTx(mesh::Packet* packet, int len) override;
+    // ---- Logging hooks ----
+    void logRx(mesh::Packet* packet, int len, float score) override;
+    void logTx(mesh::Packet* packet, int len) override;
 
 public:
     SimNode(mesh::Radio& radio, mesh::MillisecondClock& ms,
@@ -71,28 +81,24 @@ public:
     // ---- Application-level commands (called from main.cpp) ----
 
     // Send an encrypted text message to a known contact (looked up by pub-key hex prefix).
-    // Returns false if the destination is not in our contact list.
+    // Uses BaseChatMesh::sendMessage() for real ACK tracking and retry.
     bool sendTextTo(const std::string& dest_pub_hex, const std::string& text);
 
     // Flood-broadcast an Advertisement from this node.
-    // name is embedded as the app_data (max 31 bytes, null terminated).
     void broadcastAdvert(const std::string& name = "");
+
+    // Non-virtual loop that drives BaseChatMesh + ACK timeout.
+    void loop();
 };
 
 // ---------------------------------------------------------------------------
 // RoomServerNode — a non-relay endpoint that re-broadcasts every received
 // TXT_MSG to all other known contacts, acting as a simple message hub.
-//
-// On receipt of a TXT_MSG it:
-//   1. Calls the SimNode base handler (emits recv_text, handles path exchange).
-//   2. Emits a "room_post" event so the orchestrator can present the message.
-//   3. Forwards "[sender_name]: text" to every other contact.
 // ---------------------------------------------------------------------------
 class RoomServerNode : public SimNode {
 protected:
-    void onPeerDataRecv(mesh::Packet* packet, uint8_t type,
-                        int sender_idx, const uint8_t* secret,
-                        uint8_t* data, size_t len) override;
+    void onMessageRecv(const ContactInfo& contact, mesh::Packet* pkt,
+                       uint32_t sender_timestamp, const char* text) override;
 
 public:
     RoomServerNode(mesh::Radio& radio, mesh::MillisecondClock& ms,

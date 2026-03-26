@@ -1,6 +1,12 @@
 {
   "_comment": "Linear chain with a compromised middle relay demonstrating all three adversarial modes.",
   "_comment2": "Change evil_relay.adversarial.mode to 'drop', 'corrupt', or 'replay' to test each.",
+  "radio": {
+    "sf": 10,
+    "bw_hz": 250000,
+    "cr": 1,
+    "preamble_symbols": 8
+  },
   "nodes": [
     { "name": "sender",    "relay": false },
     { "name": "evil_relay",

@@ -7,13 +7,12 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import os
 import random
 import resource
 import sys
-import tempfile
 from typing import Optional
 
+from .airtime import flood_timeout_secs
 from .channel import ChannelModel
 from .cli import build_parser
 from .config import RadioConfig, load_topology
@@ -38,6 +37,7 @@ async def run(args: object) -> int:
     # Apply CLI overrides
     if args.duration is not None:          sim.duration_secs = args.duration          # type: ignore[attr-defined]
     if args.warmup is not None:            sim.warmup_secs = args.warmup              # type: ignore[attr-defined]
+    warmup_overridden = args.warmup is not None                                       # type: ignore[attr-defined]
     if args.traffic_interval is not None:  sim.traffic_interval_secs = args.traffic_interval  # type: ignore[attr-defined]
     if args.advert_interval is not None:   sim.advert_interval_secs = args.advert_interval  # type: ignore[attr-defined]
     if args.agent is not None:             sim.default_binary = args.agent            # type: ignore[attr-defined]
@@ -78,63 +78,74 @@ async def run(args: object) -> int:
         log.info("  %-20s  %s  pub=%s", name, role, pub_short)
 
     # ------------------------------------------------------------------
-    # RF physical-layer model (airtime / contention)
+    # RF physical-layer model (always: airtime + contention)
     # ------------------------------------------------------------------
-    rf_model = args.rf_model  # type: ignore[attr-defined]
-    # Always pass radio config to the router so airtime is recorded in
-    # traces (useful even without contention).  Fall back to EU Narrow
-    # defaults when the topology has no explicit radio section.
-    radio    = topo_cfg.radio or RadioConfig()
+    # Fall back to EU Narrow defaults when the topology has no explicit
+    # radio section.
+    radio = topo_cfg.radio or RadioConfig()
 
-    if rf_model != "none" and topo_cfg.radio is None:
-        log.warning(
-            "--rf-model=%s requested but topology has no 'radio' section; "
-            "falling back to --rf-model=none",
-            rf_model,
-        )
-        radio = None
-
-    channel: Optional[ChannelModel] = None
-    if rf_model == "contention" and radio is not None:
-        neighbors: dict[str, set[str]] = {
-            name: {link.other for link in topology.neighbours(name)}
-            for name in topology.all_names()
+    neighbors: dict[str, set[str]] = {
+        name: {link.other for link in topology.neighbours(name)}
+        for name in topology.all_names()
+    }
+    nodes_with_pos = [n for n in topo_cfg.nodes
+                      if n.lat is not None and n.lon is not None]
+    if len(nodes_with_pos) == len(topo_cfg.nodes):
+        positions: Optional[dict[str, tuple[float, float]]] = {
+            n.name: (n.lat, n.lon)   # type: ignore[arg-type]
+            for n in topo_cfg.nodes
         }
-        nodes_with_pos = [n for n in topo_cfg.nodes
-                          if n.lat is not None and n.lon is not None]
-        if len(nodes_with_pos) == len(topo_cfg.nodes):
-            positions: Optional[dict[str, tuple[float, float]]] = {
-                n.name: (n.lat, n.lon)   # type: ignore[arg-type]
-                for n in topo_cfg.nodes
-            }
-            log.info("RF contention model: capture effect enabled (6 dB threshold)")
-        else:
-            positions = None
-            log.info(
-                "RF contention model: hard collision (not all nodes have lat/lon)"
-            )
-        channel = ChannelModel(neighbors=neighbors, positions=positions)
+        log.info("RF contention: capture effect enabled (6 dB threshold)")
+    else:
+        positions = None
+        log.info("RF contention: hard collision (not all nodes have lat/lon)")
+    channel = ChannelModel(neighbors=neighbors, positions=positions)
 
-    if radio is not None:
-        log.info(
-            "RF model: %s  SF=%d  BW=%d Hz  CR=4/%d",
-            rf_model, radio.sf, radio.bw_hz, radio.cr + 4,
-        )
+    log.info(
+        "RF: SF=%d  BW=%d Hz  CR=4/%d",
+        radio.sf, radio.bw_hz, radio.cr + 4,
+    )
 
     # ------------------------------------------------------------------
     # Wire up router (registers callbacks on all agents)
     # ------------------------------------------------------------------
     router = PacketRouter(topology, agents, metrics, rng, tracer=tracer,
                           radio=radio, channel=channel)
-    traffic = TrafficGenerator(agents, topology, sim, metrics, rng)
+    traffic = TrafficGenerator(agents, topology, sim, metrics, rng, radio=radio)
 
     # ------------------------------------------------------------------
     # Run simulation tasks concurrently
     # ------------------------------------------------------------------
+    # Auto-derive warmup from the advert stagger when the user hasn't
+    # explicitly set --warmup.  The stagger is computed from the actual
+    # radio parameters at runtime, so it accounts for SF/BW/CR correctly.
+    # Warmup = stagger + propagation margin, so adverts have time to
+    # flood through the network before traffic starts.
+    stagger_secs = traffic._stagger_secs
+    if not warmup_overridden:
+        auto_warmup = stagger_secs + 10.0  # stagger + 10 s propagation margin
+        if auto_warmup > sim.warmup_secs:
+            log.info("Auto-adjusting warmup: %.0f s → %.0f s (stagger=%.1f s + 10 s margin)",
+                     sim.warmup_secs, auto_warmup, stagger_secs)
+            sim.warmup_secs = auto_warmup
+
+    # Grace period: let in-flight messages complete ACK/retry cycles after
+    # the traffic window closes.  Two components:
+    #   - stagger: proxy for max flood propagation time through the network
+    #     (scales with node count × airtime)
+    #   - flood_timeout: ACK wait with retries (companion_radio formula)
+    # Together they cover propagation + round-trip ACK for the last message.
+    grace_secs = stagger_secs + flood_timeout_secs(
+        radio.sf, radio.bw_hz, radio.cr, radio.preamble_symbols)
+
+    total_time = sim.warmup_secs + sim.duration_secs + grace_secs
     log.info(
-        "Simulation running for %.0f s  (warmup=%.0f s, traffic_interval=%.0f s) ...",
-        sim.duration_secs,
+        "Simulation: adverts %.0fs + warmup %.0fs + traffic %.0fs + grace %.0fs = %.0fs total  (interval=%.0fs)",
+        stagger_secs,
         sim.warmup_secs,
+        sim.duration_secs,
+        grace_secs,
+        stagger_secs + total_time,
         sim.traffic_interval_secs,
     )
 
@@ -142,20 +153,23 @@ async def run(args: object) -> int:
     # it doesn't race against the duration timer.
     await traffic.run_initial_adverts()
 
-    # Long-running tasks: only the timer is expected to complete first.
-    sim_tasks = [
+    # Long-running tasks: traffic stops sending after duration_secs, then the
+    # wall-clock timer keeps the sim alive for the grace period so in-flight
+    # messages can complete their ACK/retry cycles.
+    timer_task = asyncio.create_task(_wall_clock_timer(total_time), name="timer")
+    background_tasks = [
         asyncio.create_task(traffic.run_periodic_adverts(),       name="periodic-adverts"),
         asyncio.create_task(traffic.run_traffic(),                name="traffic"),
         asyncio.create_task(router.run_replay_drainer(),          name="replay-drainer"),
-        asyncio.create_task(_wall_clock_timer(sim.duration_secs), name="timer"),
     ]
 
-    # Block until the wall-clock timer fires (or KeyboardInterrupt)
-    done, pending = await asyncio.wait(sim_tasks, return_when=asyncio.FIRST_COMPLETED)
-    for t in pending:
+    # Block until the wall-clock timer fires (or KeyboardInterrupt).
+    # Traffic may finish before the timer — that's expected; the grace
+    # period keeps routing alive so in-flight ACKs can complete.
+    await timer_task
+    for t in background_tasks:
         t.cancel()
-    # Allow pending cancellations to propagate
-    await asyncio.gather(*pending, return_exceptions=True)
+    await asyncio.gather(*background_tasks, return_exceptions=True)
 
     # ------------------------------------------------------------------
     # Shutdown — sample RSS before quitting so processes are still alive
@@ -168,13 +182,25 @@ async def run(args: object) -> int:
         if isinstance(rss, int):
             metrics.record_rss(agent.config.name, rss)
 
+    # Snapshot contact discovery and pub→name map before shutdown
+    pub_to_name: dict[str, str] = {}
+    for name, agent in agents.items():
+        if agent.state.pub_key:
+            pub_to_name[agent.state.pub_key] = name
+    metrics.set_pub_to_name(pub_to_name)
+
+    total_nodes = len(agents)
+    for name, agent in sorted(agents.items()):
+        if not agent.state.is_relay:
+            metrics.record_contacts(name, len(agent.state.known_peers), total_nodes)
+
     log.info("Shutting down node agents ...")
     await asyncio.gather(*(agent.quit() for agent in agents.values()), return_exceptions=True)
 
     # ------------------------------------------------------------------
     # Report
     # ------------------------------------------------------------------
-    report = metrics.report() + tracer.report()
+    report = metrics.report() + tracer.report(total_sim_secs=total_time)
     print(report)
 
     if args.report is not None:                                                        # type: ignore[attr-defined]
@@ -182,11 +208,8 @@ async def run(args: object) -> int:
             fh.write(report)
         log.info("Report written to %s", args.report)                                 # type: ignore[attr-defined]
 
-    # Determine trace path: explicit --trace-out, or a temp file when -v is set.
+    # Write trace if requested.
     trace_path: str | None = args.trace_out                                            # type: ignore[attr-defined]
-    if trace_path is None and args.viz:                                                # type: ignore[attr-defined]
-        fd, trace_path = tempfile.mkstemp(suffix=".json", prefix="meshcore_trace_")
-        os.close(fd)
 
     if trace_path is not None:
         with open(trace_path, "w") as fh:
@@ -198,14 +221,6 @@ async def run(args: object) -> int:
                 fh, indent=2,
             )
         log.info("Trace written to %s", trace_path)
-
-    if args.viz:                                                                       # type: ignore[attr-defined]
-        log.info("Launching visualiser — Ctrl-C to quit ...")
-        os.execv(sys.executable, [
-            sys.executable, "-m", "viz", args.topology,                               # type: ignore[attr-defined]
-            "--trace", trace_path,
-        ])
-        # os.execv replaces this process; the line below is never reached.
 
     return 0
 

@@ -163,6 +163,18 @@ class PacketRouter:
         elif link.latency_ms > 0.0:
             await asyncio.sleep(link.latency_ms / 1000.0)
 
+        # 3b. Half-duplex check: receiver cannot RX while it is TXing.
+        if (self._channel is not None
+                and tx_start is not None
+                and tx_end is not None):
+            rx_start = tx_start + link.latency_ms / 1000.0
+            rx_end   = tx_end   + link.latency_ms / 1000.0
+            if self._channel.is_receiver_busy(receiver_name, rx_start, rx_end):
+                self._metrics.record_halfduplex_drop(sender, receiver_name)
+                log.debug("[router] half-duplex drop %s->%s (receiver busy)",
+                          sender, receiver_name)
+                return
+
         # 4. RF collision check (contention model).
         if (self._channel is not None
                 and tx_id is not None

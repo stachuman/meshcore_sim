@@ -167,7 +167,7 @@ GRID_3X3_CONTENTION = Scenario(
     settle_secs=20.0,
     rounds=2,
     seed=42,
-    rf_model="contention",
+
     stagger_secs=20.0,
     readvert_interval_secs=35.0,
 )
@@ -190,7 +190,7 @@ GRID_10X10_CONTENTION = Scenario(
     settle_secs=60.0,
     rounds=3,
     seed=42,
-    rf_model="contention",
+
     readvert_interval_secs=5.0,
     # Rationale: 100 nodes, 330 ms airtime.  Re-advertising every 5 s gives
     # 3 recovery rounds within 30 s warmup (last at t≈20 s, 10 s remaining).

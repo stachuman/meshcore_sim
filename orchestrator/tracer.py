@@ -380,7 +380,7 @@ class PacketTracer:
     # Report
     # ------------------------------------------------------------------
 
-    def report(self) -> str:
+    def report(self, total_sim_secs: float = 0.0) -> str:
         """
         Return a formatted summary suitable for the end-of-simulation report.
 
@@ -411,6 +411,9 @@ class PacketTracer:
         lines.append(f"  Total deliveries: {total_hops}")
         lines.append(f"  Flood-routed:     {flood_pkts}")
         lines.append(f"  Direct-routed:    {direct_pkts}")
+        if total_pkts > 0:
+            amp = total_hops / total_pkts
+            lines.append(f"  Flood amplification: {amp:.1f}x  ({total_hops} hops / {total_pkts} packets)")
         lines.append("")
 
         # --- Per-type breakdown ---
@@ -464,6 +467,22 @@ class PacketTracer:
                     f"max={max(flood_props):.0f}ms"
                     f"  ({len(flood_props)} floods)"
                 )
+            # Channel utilization: deduplicate by tx_id so each radio
+            # transmission is counted once (not once per receiver).
+            if total_sim_secs > 0:
+                unique_tx_airtime: dict[int, float] = {}
+                for tr in self._traces.values():
+                    for h in tr.hops:
+                        if h.tx_id is not None and h.airtime_ms > 0:
+                            unique_tx_airtime[h.tx_id] = h.airtime_ms
+                if unique_tx_airtime:
+                    total_airtime_s = sum(unique_tx_airtime.values()) / 1000.0
+                    n_tx = len(unique_tx_airtime)
+                    util = total_airtime_s / total_sim_secs * 100.0
+                    lines.append(
+                        f"    Channel utilization:       {util:.1f}%"
+                        f"  ({total_airtime_s:.1f}s airtime from {n_tx} TXs in {total_sim_secs:.0f}s)"
+                    )
             lines.append("")
 
         # --- High-exposure packets (top 10 by witness count) ---

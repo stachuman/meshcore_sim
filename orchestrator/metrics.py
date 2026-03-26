@@ -33,11 +33,23 @@ class MetricsCollector:
         self._adv_corrupt_count: int = 0
         self._adv_replay_count: int = 0
         self._collision_count: int = 0
+        self._halfduplex_drop_count: int = 0
 
         # Message delivery tracking — keyed by message text
         # (unique per send because TrafficGenerator embeds a timestamp)
         self._pending: dict[str, SendRecord] = {}
         self._completed: list[SendRecord] = []
+
+        # ACK outcome counters (parsed from C++ node "log" events)
+        self._ack_confirmed: int = 0
+        self._ack_retries: int = 0
+        self._ack_failed: int = 0
+
+        # Contact discovery snapshot (populated before shutdown)
+        self._contacts: dict[str, tuple[int, int]] = {}  # name → (discovered, total)
+
+        # Pub-key → node name mapping (populated before report)
+        self._pub_to_name: dict[str, str] = {}
 
     # ------------------------------------------------------------------
     # Recording methods (called by router / traffic generator)
@@ -64,8 +76,17 @@ class MetricsCollector:
     def record_collision(self, sender: str, receiver: str) -> None:
         self._collision_count += 1
 
+    def record_halfduplex_drop(self, sender: str, receiver: str) -> None:
+        self._halfduplex_drop_count += 1
+
     def record_rss(self, node: str, rss_kb: int) -> None:
         self._rss_kb[node] = rss_kb
+
+    def record_contacts(self, name: str, discovered: int, total: int) -> None:
+        self._contacts[name] = (discovered, total)
+
+    def set_pub_to_name(self, mapping: dict[str, str]) -> None:
+        self._pub_to_name = mapping
 
     def record_send_attempt(self, sender: str, dest_pub: str, text: str) -> None:
         self._pending[text] = SendRecord(
@@ -88,6 +109,14 @@ class MetricsCollector:
                 rec.received_at = time.monotonic()
                 rec.received_by = node_name
                 self._completed.append(rec)
+        elif etype == "log":
+            msg = event.get("msg", "")
+            if msg.startswith("ACK confirmed"):
+                self._ack_confirmed += 1
+            elif msg.startswith("ACK timeout"):
+                self._ack_retries += 1
+            elif msg.startswith("msg delivery failed"):
+                self._ack_failed += 1
 
     # ------------------------------------------------------------------
     # Report
@@ -125,6 +154,10 @@ class MetricsCollector:
     def collision_count(self) -> int:
         return self._collision_count
 
+    @property
+    def halfduplex_drop_count(self) -> int:
+        return self._halfduplex_drop_count
+
     def report(self) -> str:
         # Per-node TX / RX — column width adapts to the longest node name
         all_nodes = sorted(set(self._tx) | set(self._rx))
@@ -141,6 +174,15 @@ class MetricsCollector:
                 lines.append(f"  {n:<{col}}  {self._tx[n]:>6}  {self._rx[n]:>6}")
         lines.append("")
 
+        # Endpoint contact discovery
+        if self._contacts:
+            lines.append("  Endpoint contacts discovered:")
+            for name in sorted(self._contacts):
+                disc, total = self._contacts[name]
+                pct = disc / total * 100.0 if total else 0.0
+                lines.append(f"    {name:<{col}}  {disc}/{total}  ({pct:.0f}%)")
+            lines.append("")
+
         # Delivery rate
         total = len(self._completed) + len(self._pending)
         delivered = len(self._completed)
@@ -149,19 +191,31 @@ class MetricsCollector:
         if self._pending:
             lines.append(f"  Undelivered:      {len(self._pending)} message(s) still in flight")
 
-        # Latency
+        # ACK outcome breakdown
+        ack_total = self._ack_confirmed + self._ack_retries + self._ack_failed
+        if ack_total:
+            lines.append(
+                f"  ACK outcomes:     confirmed={self._ack_confirmed}  "
+                f"retries={self._ack_retries}  failed={self._ack_failed}"
+            )
+
+        # Latency with percentiles
         if self._completed:
-            latencies = [
+            latencies = sorted(
                 (r.received_at - r.sent_at) * 1000.0
                 for r in self._completed
                 if r.received_at is not None
-            ]
+            )
             if latencies:
                 avg = sum(latencies) / len(latencies)
-                mx = max(latencies)
-                mn = min(latencies)
+                mn = latencies[0]
+                mx = latencies[-1]
+                p50 = latencies[len(latencies) // 2]
+                p95_idx = min(int(len(latencies) * 0.95), len(latencies) - 1)
+                p95 = latencies[p95_idx]
                 lines.append(
-                    f"  Latency (send→recv): min={mn:.0f}ms  avg={avg:.0f}ms  max={mx:.0f}ms"
+                    f"  Latency (send→recv): min={mn:.0f}ms  p50={p50:.0f}ms  "
+                    f"avg={avg:.0f}ms  p95={p95:.0f}ms  max={mx:.0f}ms"
                 )
 
         lines.append("")
@@ -169,6 +223,7 @@ class MetricsCollector:
         # Drop / adversarial counts
         lines.append(f"  Link-level packet loss:  {self._link_loss_count}")
         lines.append(f"  RF collisions dropped:   {self._collision_count}")
+        lines.append(f"  Half-duplex RX drops:    {self._halfduplex_drop_count}")
         lines.append(f"  Adversarial drops:       {self._adv_drop_count}")
         lines.append(f"  Adversarial corruptions: {self._adv_corrupt_count}")
         lines.append(f"  Adversarial replays:     {self._adv_replay_count}")
@@ -185,6 +240,16 @@ class MetricsCollector:
                 )
                 lines.append(
                     f"    [{lat:6.0f} ms]  {r.sender} → {r.received_by}: {r.text!r}"
+                )
+            lines.append("")
+
+        # Undelivered message log
+        if self._pending:
+            lines.append("  Undelivered messages:")
+            for r in self._pending.values():
+                dest_name = self._pub_to_name.get(r.dest_pub, r.dest_pub[:16] + "...")
+                lines.append(
+                    f"    {r.sender} → {dest_name}: {r.text!r}"
                 )
             lines.append("")
 

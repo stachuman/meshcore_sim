@@ -59,3 +59,58 @@ def lora_airtime_ms(
 
     t_payload_ms = payload_symbols * t_sym_ms
     return t_preamble_ms + t_payload_ms
+
+
+# Typical MeshCore self-advert size (32-byte identity + framing).
+_TYPICAL_ADVERT_BYTES = 40
+
+
+def advert_stagger_secs(
+    sf: int,
+    bw_hz: int,
+    cr: int,
+    node_count: int,
+    preamble_symbols: int = 8,
+    margin: float = 2.0,
+) -> float:
+    """Compute a safe stagger window for initial advert floods.
+
+    In a hard-collision RF model, two transmissions that overlap at a shared
+    receiver destroy each other.  Spreading the adverts over a window of
+    ``node_count × airtime × margin`` ensures every node gets a clear slot.
+
+    This mimics reality: nodes in the field don't all power on at the same
+    instant — they boot over seconds to minutes, naturally avoiding collisions.
+
+    Returns the stagger window width in seconds.
+    """
+    airtime_ms = lora_airtime_ms(sf, bw_hz, cr, _TYPICAL_ADVERT_BYTES,
+                                 preamble_symbols)
+    return node_count * airtime_ms / 1000.0 * margin
+
+
+# Typical MeshCore text message size (encrypted payload + framing).
+_TYPICAL_MSG_BYTES = 60
+
+
+def flood_timeout_secs(
+    sf: int,
+    bw_hz: int,
+    cr: int,
+    preamble_symbols: int = 8,
+    retries: int = 3,
+) -> float:
+    """Estimate the total ACK wait time for a flood-routed text message.
+
+    Uses the real companion_radio formula:
+        flood_timeout = SEND_TIMEOUT_BASE + FLOOD_SEND_TIMEOUT_FACTOR * airtime
+
+    With *retries* additional attempts, total wait =
+        (retries + 1) * flood_timeout.
+
+    Returns the result in seconds.
+    """
+    airtime_ms = lora_airtime_ms(sf, bw_hz, cr, _TYPICAL_MSG_BYTES,
+                                 preamble_symbols)
+    single_timeout_ms = 500 + 16.0 * airtime_ms
+    return (retries + 1) * single_timeout_ms / 1000.0

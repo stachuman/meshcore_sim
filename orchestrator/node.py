@@ -217,7 +217,12 @@ class NodeAgent:
                      event.get("from", "")[:8], event.get("text", ""))
 
         elif etype == "log":
-            log.debug("[%s] node-log: %s", self.config.name, event.get("msg", ""))
+            msg = event.get("msg", "")
+            # Promote ACK/retry messages to INFO so protocol behavior is visible.
+            if "ACK" in msg or "retry" in msg or "failed" in msg:
+                log.info("[%s] %s", self.config.name, msg)
+            else:
+                log.debug("[%s] node-log: %s", self.config.name, msg)
 
         # Always call the generic event callback (for metrics)
         if self.event_callback is not None:

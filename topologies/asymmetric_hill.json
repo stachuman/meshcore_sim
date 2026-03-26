@@ -3,6 +3,13 @@
   "_comment2": "Uplink (client → relay) is strong; downlink (relay → client) is weaker.",
   "_comment3": "deep_valley can transmit to the relay but cannot hear it at all (one-way link).",
 
+  "radio": {
+    "sf": 10,
+    "bw_hz": 250000,
+    "cr": 1,
+    "preamble_symbols": 8
+  },
+
   "nodes": [
     { "name": "base_camp",   "relay": false },
     { "name": "hill_relay",  "relay": true  },

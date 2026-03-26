@@ -122,11 +122,11 @@ Open each trace in a separate browser tab to compare visually:
 
 ```bash
 # Baseline run
-python3 -m viz /tmp/adaptive_traces/grid_3x3_contention_topology.json \
+python3 -m workbench /tmp/adaptive_traces/grid_3x3_contention_topology.json \
               --trace /tmp/adaptive_traces/grid_3x3_contention_node_agent_trace.json
 
 # Adaptive run (in a second terminal)
-python3 -m viz /tmp/adaptive_traces/grid_3x3_contention_topology.json \
+python3 -m workbench /tmp/adaptive_traces/grid_3x3_contention_topology.json \
               --trace /tmp/adaptive_traces/grid_3x3_contention_adaptive_agent_trace.json
 ```
 

@@ -1,7 +1,5 @@
 # Core simulator (orchestrator + scraper) — no packages required; stdlib only.
 
-# Optional: install these to use the topology visualiser (python3 -m viz).
+# Optional: install these to use the workbench (python3 -m workbench).
 # pip install -r requirements.txt
-dash>=2.14
-dash-cytoscape>=1.0
-plotly>=5.18
+nicegui>=1.4

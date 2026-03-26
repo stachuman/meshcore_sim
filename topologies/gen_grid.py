@@ -92,6 +92,12 @@ def gen_grid(
         ),
         "nodes": nodes,
         "edges": edges,
+        "radio": {
+            "sf": 10,
+            "bw_hz": 250000,
+            "cr": 1,
+            "preamble_symbols": 8,
+        },
         "simulation": {
             "warmup_secs": warmup_secs,
             "duration_secs": duration_secs,

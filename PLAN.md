@@ -37,7 +37,7 @@ Success criteria:
 
 ---
 
-## Simulator state  (as of 2026-03-19)
+## Simulator state  (as of 2026-03-23)
 
 ### What exists
 
@@ -50,7 +50,7 @@ Success criteria:
 | `PacketTracer` — per-packet path & witness analysis | ✅ complete |
 | `packet.py` — pure-Python MeshCore wire-format decoder | ✅ complete |
 | C++ unit tests (crypto shims, packet serialisation) | ✅ complete |
-| Python unit / integration tests (393 tests, all passing) | ✅ complete |
+| Python unit / integration tests (399 tests, all passing) | ✅ complete |
 | Example topologies (linear, star, adversarial, asymmetric hill) | ✅ complete |
 | Grid topology generator (`topologies/gen_grid.py`) | ✅ complete |
 | Pre-generated 10×10 grid topology (`topologies/grid_10x10.json`) | ✅ complete |
@@ -88,6 +88,9 @@ Success criteria:
 | `topologies/grid_10x10.json` — corrected `radio` section to SF10/BW250/CR4-5 (matches MeshCore source) | ✅ complete |
 | `tools/fetch_topology.py` — always emits `radio` section; `--sf`, `--bw-hz`, `--cr` CLI flags for override | ✅ complete |
 | `EXAMPLES.md` — catalogue of 14 worked simulation scenarios with exact commands and expected output | ✅ complete |
+| SimNode inherits BaseChatMesh — real ACK/retry, contacts, path exchange, duty-cycle | ✅ complete |
+| SimRadio TX timing — `isSendComplete()` waits for real airtime, enables Dispatcher duty-cycle | ✅ complete |
+| Arduino.h shim — enables BaseChatMesh compilation on POSIX | ✅ complete |
 
 ### Key invariants
 
@@ -97,38 +100,37 @@ Success criteria:
 
 ### Architecture decisions (locked)
 
-**`node_agent` inherits from `mesh::Mesh` only — will not incorporate `BaseChatMesh`.**
+**`node_agent` inherits from `BaseChatMesh` — runs real MeshCore ACK/retry code.**
 
-`SimNode` skips `BaseChatMesh` deliberately: it gives us direct control over all
-routing hooks (`onPeerDataRecv`, `onPeerPathRecv`, `allowPacketForward`,
-`getRetransmitDelay`) without inheriting retry timers, ACK state machines, or
-application-level channel logic.  Adding `BaseChatMesh` would make instrumentation
-and routing experiments significantly harder.
+`SimNode` inherits from `BaseChatMesh`, giving it the full MeshCore chat stack:
+contact management (32-slot array), ECDH shared secrets, ACK tracking via
+`processAck()`, timeout/retry via `onSendTimeout()`, path exchange via
+`onPeerDataRecv()`/`onPeerPathRecv()`, and signed/CLI data handling. SimNode
+implements the pure-virtual "UI" hooks to emit JSON events to stdout.
+
+The `PendingMsg` struct in SimNode tracks the expected ACK CRC returned by
+`sendMessage()` for matching in `processAck()` and retry in `onSendTimeout()`.
+This is the same pattern used by real MeshCore firmware applications.
+
+**SimRadio provides realistic TX timing — enabling Dispatcher duty-cycle.**
+
+`SimRadio::isSendComplete()` waits for the real airtime to elapse (computed by
+`getEstAirtimeFor()` using Semtech AN1200.13). This enables the Dispatcher's
+built-in token-bucket duty-cycle budget tracking without any code changes to
+MeshCore.
 
 **`RoomServerNode` is implemented as a `SimNode` subclass — not a separate binary.**
 
-For use cases that need application-layer behaviour (room servers, bot nodes),
-we subclass `SimNode` directly rather than introducing `BaseChatMesh`.
-`RoomServerNode` (`node_agent/SimNode.h/.cpp`) overrides `onPeerDataRecv` to:
-1. Call the base handler (emits `recv_text`, handles path exchange).
+`RoomServerNode` (`node_agent/SimNode.h/.cpp`) overrides `onMessageRecv` to:
+1. Call the base handler (emits `recv_text`).
 2. Emit a `room_post` JSON event so the orchestrator can surface the message.
 3. Forward `"[sender]: text"` to every other known contact via `sendTextTo`.
 
 Activated at runtime with the `--room-server` flag; topology JSON uses
 `"room_server": true` on a node entry.
 
-**A future `app_node_agent` binary remains planned for heavier application stacks.**
-
-When it becomes necessary to simulate Companion clients or other firmware that
-requires `BaseChatMesh` / FILESYSTEM / RTClib.h, a *separate* `app_node_agent/`
-directory will contain a second executable.  It will:
-- Speak the same stdin/stdout JSON protocol as `node_agent` (see Protocol Spec below).
-- Be invoked by specifying `"binary": "./app_node_agent/build/app_node_agent"` on
-  individual nodes in the topology JSON.
-- Share the `arduino_shim/` and `crypto_shim/` directories with `node_agent`.
-
-Mixed topologies (some nodes running `node_agent`, others `app_node_agent`) are
-fully supported by the orchestrator today via the per-node `binary` field.
+Mixed topologies (some nodes running `node_agent`, others custom binaries) are
+fully supported by the orchestrator via the per-node `binary` field.
 
 ---
 
@@ -347,7 +349,7 @@ It reads topology JSON files and optional trace files produced by the simulator.
 - **Force-directed layout** (synthetic / no-coordinate topologies): use
   dash-cytoscape's built-in `cose` layout.  Hover tooltip shows node name,
   role, edge loss, latency, SNR.
-- CLI entry point: `python3 -m viz <topology.json>` → opens browser.
+- CLI entry point: `python3 -m workbench <topology.json>` → opens browser.
 
 #### Phase 2 — Packet trace overlay
 
@@ -540,6 +542,7 @@ by `unique_receivers` to see which adversarial nodes saw which packets.
 |------|--------|
 | 2026-03-16 | `tools/README.md` — full auth guide and CLI reference for scraper; FD-limit fix for large topologies |
 | 2026-03-17 | RF physical-layer model: `--rf-model airtime\|contention`; `airtime.py` (Semtech AN1200.13); `channel.py` (hard collision + capture effect); `RadioConfig` defaults corrected to SF10/BW250/CR4-5; `grid_10x10.json` updated; `fetch_topology.py` gains `--sf/--bw-hz/--cr` and always emits `radio` section; 19 new tests |
+| 2026-03-23 | **SimNode → BaseChatMesh refactor**: SimNode now inherits BaseChatMesh (real ACK/retry/contacts). SimRadio TX timing enables duty-cycle enforcement. `isSendComplete()` waits for real airtime. `processAck()`/`onSendTimeout()` implement real ACK matching + up to 3 retries via `sendMessage()`. CMakeLists adds BaseChatMesh.cpp, TxtDataHelpers.cpp, AdvertDataHelpers.cpp. Arduino.h shim added. 399 tests all passing. |
 | 2026-03-23 | Real delays in `node_agent`: removed `getRetransmitDelay()` zero-override from SimNode; `SimRNG` replaced with seeded xoshiro256** PRNG (from `--prv` or node name); `SimRadio::getEstAirtimeFor()` uses Semtech AN1200.13 formula with configurable `--sf/--bw/--cr` flags; `autoTuneByNeighborCount()` called in `onAdvertRecv()` with `__has_include` guard for fork compatibility; radio params threaded from orchestrator to node agents; airtime always recorded in traces; test warmups increased for real delays; 393 tests |
 | 2026-03-20 | `DETERMINISM.md` — full analysis of non-determinism sources (SimRNG, SimClock, asyncio ordering) + two-phase remediation plan (middle path + full DES) |
 | 2026-03-19 | `privatemesh/adaptive_delay/` — advert-exemption fix (`getRetransmitDelay` uses baseline formula for ADVERT packets, adaptive only for DATA); `Scenario.stagger_secs`; `GRID_3X3_CONTENTION` stagger=20 s / readvert=35 s / warmup=75 s; adaptive_agent achieves 100% delivery vs 0% baseline under hard-collision model; 393 tests |

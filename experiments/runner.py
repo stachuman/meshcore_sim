@@ -53,11 +53,6 @@ class Scenario:
         Number of text messages to send from source to destination.
     seed:
         RNG seed passed to PacketRouter and TrafficGenerator for reproducibility.
-    rf_model:
-        RF physical-layer model to use.  One of ``"none"`` (default),
-        ``"airtime"`` (gate deliveries by on-air time), or ``"contention"``
-        (airtime + hard-collision detection).  Requires the topology's
-        ``radio`` section to be populated; ignored silently if absent.
     readvert_interval_secs:
         When set, re-flood advertisements every this many seconds throughout
         the warmup period so nodes can recover from collision losses in the
@@ -72,18 +67,15 @@ class Scenario:
     settle_secs: float = 3.0
     rounds: int = 2
     seed: int = 42
-    rf_model: str = "none"   # "none" | "airtime" | "contention"
     readvert_interval_secs: Optional[float] = None
     stagger_secs: Optional[float] = None
     """
     Width of the uniform-random stagger window used for each advert flood round.
 
-    When ``None`` (default) the ``TrafficGenerator`` default of 1 s is used,
-    which is fine for idealised topologies with no RF model.  For contention
-    scenarios with many nodes, set this to something wider (e.g. ``5.0`` for a
-    9-node grid) so neighbouring nodes are unlikely to transmit simultaneously:
-    with 1 s stagger and 530 ms airtime the centre node almost always collides
-    with the corner nodes, preventing them from ever advertising successfully.
+    When ``None`` (default), ``TrafficGenerator`` auto-computes a safe stagger
+    from the radio config and node count (``node_count × airtime × 2``).
+    Pass an explicit value to override — e.g. ``20.0`` for a 9-node grid
+    contention scenario where relay cascades must complete between staggers.
     """
 
 
@@ -215,29 +207,28 @@ async def _run_async(
         await asyncio.gather(*(agents[n].start() for n in batch))
     await asyncio.gather(*(a.wait_ready(timeout=15.0) for a in agents.values()))
 
-    # Build RF model objects (mirrors orchestrator/__main__.py logic).
+    # Build RF model objects — always use contention (airtime + collision).
     radio = topo_cfg.radio or RadioConfig()
-    channel: Optional[ChannelModel] = None
-    if scenario.rf_model == "contention" and radio is not None:
-        neighbors_map = {
-            name: {link.other for link in topology.neighbours(name)}
-            for name in topology.all_names()
-        }
-        # Synthetic topologies have no lat/lon → hard collision detection.
-        positions = None
-        nodes_with_pos = [n for n in topo_cfg.nodes
-                          if n.lat is not None and n.lon is not None]
-        if len(nodes_with_pos) == len(topo_cfg.nodes):
-            positions = {n.name: (n.lat, n.lon)   # type: ignore[arg-type]
-                         for n in topo_cfg.nodes}
-        channel = ChannelModel(neighbors=neighbors_map, positions=positions)
+    neighbors_map = {
+        name: {link.other for link in topology.neighbours(name)}
+        for name in topology.all_names()
+    }
+    positions = None
+    nodes_with_pos = [n for n in topo_cfg.nodes
+                      if n.lat is not None and n.lon is not None]
+    if len(nodes_with_pos) == len(topo_cfg.nodes):
+        positions = {n.name: (n.lat, n.lon)   # type: ignore[arg-type]
+                     for n in topo_cfg.nodes}
+    channel = ChannelModel(neighbors=neighbors_map, positions=positions)
 
     # Wire routing and traffic.
     PacketRouter(topology, agents, metrics, rng, tracer=tracer,
                  radio=radio, channel=channel)
-    traffic = TrafficGenerator(agents, topology, topo_cfg.simulation, metrics, rng)
+    traffic = TrafficGenerator(agents, topology, topo_cfg.simulation, metrics, rng,
+                               radio=radio)
 
-    stagger = scenario.stagger_secs or 1.0
+    # Explicit stagger from scenario, or None → auto-computed by TrafficGenerator.
+    stagger = scenario.stagger_secs
     await traffic.run_initial_adverts(stagger_secs=stagger)
     if scenario.readvert_interval_secs is not None:
         # Re-flood adverts periodically so nodes can recover from collision
@@ -310,7 +301,7 @@ def run_scenario(
     trace_out:
         If provided, write the PacketTracer JSON export to this path after the
         run completes.  The file can be opened with
-        ``python3 -m viz <topology.json> --trace <trace_out>`` for interactive
+        ``python3 -m workbench <topology.json> --trace <trace_out>`` for interactive
         packet-path visualisation.
     """
     if label is None:

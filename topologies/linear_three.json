@@ -1,5 +1,11 @@
 {
   "_comment": "alice -- relay1 -- bob  (simple linear chain)",
+  "radio": {
+    "sf": 8,
+    "bw_hz": 62500,
+    "cr": 4,
+    "preamble_symbols": 8
+  },
   "nodes": [
     { "name": "alice",  "relay": false },
     { "name": "relay1", "relay": true  },

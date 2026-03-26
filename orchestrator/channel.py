@@ -80,6 +80,21 @@ class ChannelModel:
         """Discard TX records whose end time is earlier than *t*."""
         self._active = {k: v for k, v in self._active.items() if v[2] >= t}
 
+    def is_receiver_busy(
+        self, receiver: str, rx_start: float, rx_end: float
+    ) -> bool:
+        """Return ``True`` if *receiver* is transmitting during ``[rx_start, rx_end]``.
+
+        LoRa is half-duplex: a node cannot receive while it is transmitting.
+        """
+        for _tx_id, (sender, start, end) in self._active.items():
+            if sender != receiver:
+                continue
+            # Temporal overlap
+            if start < rx_end and end > rx_start:
+                return True
+        return False
+
     def is_lost(
         self,
         primary_sender: str,

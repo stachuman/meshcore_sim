@@ -163,28 +163,11 @@ class TestDensityTableLookup(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# Unit: Scenario rf_model field and registry
+# Unit: Scenario registry and contention config
 # ---------------------------------------------------------------------------
 
-class TestScenarioRfModel(unittest.TestCase):
-    """Verify Scenario.rf_model field and scenarios registry."""
-
-    def test_default_rf_model_is_none(self):
-        from experiments.runner import Scenario
-        from sim_tests.helpers import grid_topo_config
-        s = Scenario(name="test", topo_factory=lambda: grid_topo_config(3, 3))
-        self.assertEqual(s.rf_model, "none")
-
-    def test_non_contention_scenarios_have_rf_model_none(self):
-        from experiments.scenarios import LINEAR, GRID_3X3, GRID_10X10
-        for sc in [LINEAR, GRID_3X3, GRID_10X10]:
-            self.assertEqual(sc.rf_model, "none",
-                             msg=f"{sc.name} should have rf_model='none'")
-
-    def test_contention_scenarios_have_rf_model_contention(self):
-        from experiments.scenarios import GRID_3X3_CONTENTION, GRID_10X10_CONTENTION
-        self.assertEqual(GRID_3X3_CONTENTION.rf_model, "contention")
-        self.assertEqual(GRID_10X10_CONTENTION.rf_model, "contention")
+class TestScenarioRegistry(unittest.TestCase):
+    """Verify scenario registry and radio config."""
 
     def test_contention_scenarios_registered_in_scenario_by_name(self):
         from experiments.scenarios import SCENARIO_BY_NAME
@@ -218,10 +201,7 @@ class TestScenarioRfModel(unittest.TestCase):
             cfg = sc.topo_factory()
             self.assertIsNotNone(
                 cfg.radio,
-                msg=(
-                    f"Scenario {sc.name!r} has rf_model='contention' "
-                    "but no radio config in topology"
-                ),
+                msg=f"Scenario {sc.name!r} has no radio config in topology",
             )
 
     def test_contention_scenarios_radio_matches_meshcore_defaults(self):
@@ -553,7 +533,7 @@ def _get_linear_contention():
             settle_secs=10.0,
             rounds=2,
             seed=42,
-            rf_model="contention",
+            stagger_secs=1.0,
         )
     return _LINEAR_CONTENTION
 

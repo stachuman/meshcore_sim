@@ -29,7 +29,7 @@ Examples:
         type=float,
         default=None,
         metavar="SECS",
-        help="Override simulation duration in seconds",
+        help="Override traffic duration in seconds (added on top of warmup)",
     )
     p.add_argument(
         "--warmup",
@@ -95,31 +95,6 @@ Examples:
         default=None,
         metavar="FILE",
         dest="trace_out",
-        help="Write packet trace data to this JSON file for use with python3 -m viz",
+        help="Write packet trace data to this JSON file (view with python3 -m workbench)",
     )
-    p.add_argument(
-        "-v", "--viz",
-        action="store_true",
-        default=False,
-        help=(
-            "Launch the visualiser automatically after the simulation completes.  "
-            "If --trace-out is not specified a temporary file is used.  "
-            "The orchestrator process is replaced by the viz server (Ctrl-C to quit)."
-        ),
-    )
-    p.add_argument(
-        "--rf-model",
-        choices=["none", "airtime", "contention"],
-        default="none",
-        dest="rf_model",
-        help=(
-            "RF physical-layer model.  "
-            "none: instant delivery (default, all existing behaviour preserved).  "
-            "airtime: delay each delivery by the LoRa on-air time + propagation.  "
-            "contention: airtime + collision detection (packets lost when two "
-            "nodes transmit simultaneously to the same receiver).  "
-            "Requires a 'radio' section in the topology JSON."
-        ),
-    )
-
     return p
