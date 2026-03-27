@@ -16,7 +16,6 @@ class EdgeLink:
     loss: float
     latency_ms: float
     snr: float
-    rssi: float
 
 
 def _resolve(base: float, override: float | None) -> float:
@@ -42,14 +41,12 @@ class Topology:
                 loss=      _resolve(edge.loss,       fwd.loss       if fwd else None),
                 latency_ms=_resolve(edge.latency_ms, fwd.latency_ms if fwd else None),
                 snr=       _resolve(edge.snr,        fwd.snr        if fwd else None),
-                rssi=      _resolve(edge.rssi,       fwd.rssi       if fwd else None),
             ))
             self._adj[edge.b].append(EdgeLink(
                 other=edge.a,
                 loss=      _resolve(edge.loss,       rev.loss       if rev else None),
                 latency_ms=_resolve(edge.latency_ms, rev.latency_ms if rev else None),
                 snr=       _resolve(edge.snr,        rev.snr        if rev else None),
-                rssi=      _resolve(edge.rssi,       rev.rssi       if rev else None),
             ))
 
     def neighbours(self, node_name: str) -> list[EdgeLink]:

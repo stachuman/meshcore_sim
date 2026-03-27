@@ -1,45 +1,55 @@
 {
   "_comment": "Hill-top relay with asymmetric RF links.",
-  "_comment2": "Uplink (client → relay) is strong; downlink (relay → client) is weaker.",
+  "_comment2": "Uplink (client \u2192 relay) is strong; downlink (relay \u2192 client) is weaker.",
   "_comment3": "deep_valley can transmit to the relay but cannot hear it at all (one-way link).",
-
   "radio": {
     "sf": 10,
     "bw_hz": 250000,
     "cr": 1,
     "preamble_symbols": 8
   },
-
   "nodes": [
-    { "name": "base_camp",   "relay": false },
-    { "name": "hill_relay",  "relay": true  },
-    { "name": "deep_valley", "relay": false }
+    {
+      "name": "base_camp",
+      "relay": false
+    },
+    {
+      "name": "hill_relay",
+      "relay": true
+    },
+    {
+      "name": "deep_valley",
+      "relay": false
+    }
   ],
-
   "edges": [
     {
       "_comment": "base_camp <-> hill_relay: better uplink than downlink",
       "a": "base_camp",
       "b": "hill_relay",
-      "loss":       0.02,
+      "loss": 0.02,
       "latency_ms": 15.0,
-      "snr":         8.0,
-      "rssi":      -82.0,
-      "a_to_b": { "snr": 14.0, "rssi": -68.0 },
-      "b_to_a": { "snr":  5.0, "rssi": -93.0, "loss": 0.15 }
+      "snr": 8.0,
+      "a_to_b": {
+        "snr": 14.0
+      },
+      "b_to_a": {
+        "snr": 5.0,
+        "loss": 0.15
+      }
     },
     {
       "_comment": "deep_valley -> hill_relay works fine; hill_relay -> deep_valley: total loss",
       "a": "deep_valley",
       "b": "hill_relay",
-      "loss":       0.05,
+      "loss": 0.05,
       "latency_ms": 25.0,
-      "snr":         7.0,
-      "rssi":      -88.0,
-      "b_to_a": { "loss": 1.0 }
+      "snr": 7.0,
+      "b_to_a": {
+        "loss": 1.0
+      }
     }
   ],
-
   "simulation": {
     "warmup_secs": 5,
     "duration_secs": 120,

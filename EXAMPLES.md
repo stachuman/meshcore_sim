@@ -150,7 +150,7 @@ python3 -m workbench topologies/asymmetric_hill.json
 ```
 
 The force-directed layout in the visualiser does not model RF range, but
-hover over any edge to see the per-direction SNR/RSSI/loss values.
+hover over any edge to see the per-direction SNR/loss values.
 
 ---
 

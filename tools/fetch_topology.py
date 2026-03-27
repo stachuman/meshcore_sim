@@ -50,7 +50,6 @@ from typing import Optional
 _DEFAULT_LOSS        = 0.05   # 5 % — typical outdoor LoRa link
 _DEFAULT_LATENCY_MS  = 20.0   # ms — reasonable LoRa air-time
 _DEFAULT_SNR         = 6.0    # dB
-_DEFAULT_RSSI        = -90.0  # dBm
 
 _ROLE_REPEATER    = "repeater"
 _ROLE_COMPANION   = "companion"
@@ -281,12 +280,9 @@ def build_topology(
         return best_id if best_dist < 0.10 else None  # 100 m tolerance
 
     # Per-device signal quality for edge annotation
-    node_rssi: dict[str, float] = {}
     node_snr:  dict[str, float] = {}
     for n in nodes_raw:
         meta = n["_meta"]
-        if meta["rssi"] is not None:
-            node_rssi[n["name"]] = float(meta["rssi"])
         if meta["snr"] is not None:
             node_snr[n["name"]]  = float(meta["snr"])
 
@@ -328,8 +324,6 @@ def build_topology(
             continue
 
         # Signal quality: average of each node's last-known values
-        rssi = (node_rssi.get(id_a, _DEFAULT_RSSI)
-                + node_rssi.get(id_b, _DEFAULT_RSSI)) / 2.0
         snr  = (node_snr.get(id_a,  _DEFAULT_SNR)
                 + node_snr.get(id_b,  _DEFAULT_SNR))  / 2.0
 
@@ -339,7 +333,6 @@ def build_topology(
             "loss":       _DEFAULT_LOSS,
             "latency_ms": _DEFAULT_LATENCY_MS,
             "snr":        round(snr, 1),
-            "rssi":       round(rssi, 1),
             "_count":     count,    # stripped before output; kept for stats
             "_dist_km":   round(dist, 2),
         })

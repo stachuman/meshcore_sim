@@ -80,10 +80,6 @@ class TestTopologyAdjacencyLinearThree(unittest.TestCase):
         link = self.topo.neighbours("alice")[0]
         self.assertAlmostEqual(link.snr, 8.0)
 
-    def test_edge_link_rssi_preserved(self):
-        link = self.topo.neighbours("alice")[0]
-        self.assertAlmostEqual(link.rssi, -85.0)
-
     def test_edge_is_bidirectional_same_loss(self):
         # alice→relay1 and relay1→alice should carry the same edge parameters
         link_alice  = self.topo.neighbours("alice")[0]          # alice → relay1
@@ -168,10 +164,10 @@ class TestTopologyStarFive(unittest.TestCase):
                 NodeConfig(name="n4",    relay=False),
             ],
             edges=[
-                EdgeConfig(a="n1", b="hub", loss=0.1,  latency_ms=10.0, snr=9.0,  rssi=-81.0),
-                EdgeConfig(a="n2", b="hub", loss=0.2,  latency_ms=20.0, snr=7.0,  rssi=-88.0),
-                EdgeConfig(a="n3", b="hub", loss=0.3,  latency_ms=30.0, snr=5.0,  rssi=-95.0),
-                EdgeConfig(a="n4", b="hub", loss=0.05, latency_ms=5.0,  snr=12.0, rssi=-75.0),
+                EdgeConfig(a="n1", b="hub", loss=0.1,  latency_ms=10.0, snr=9.0),
+                EdgeConfig(a="n2", b="hub", loss=0.2,  latency_ms=20.0, snr=7.0),
+                EdgeConfig(a="n3", b="hub", loss=0.3,  latency_ms=30.0, snr=5.0),
+                EdgeConfig(a="n4", b="hub", loss=0.05, latency_ms=5.0,  snr=12.0),
             ],
             simulation=SimulationConfig(),
         )
@@ -210,8 +206,8 @@ class TestTopologyAsymmetricEdge(unittest.TestCase):
     and that unoverridden fields fall back to the symmetric base value.
 
     Setup: tx → rx edge with:
-      symmetric base: loss=0.1, latency_ms=20, snr=8, rssi=-85
-      a_to_b (tx→rx): snr=14, rssi=-70   (only RF quality overridden)
+      symmetric base: loss=0.1, latency_ms=20, snr=8
+      a_to_b (tx→rx): snr=14             (only RF quality overridden)
       b_to_a (rx→tx): loss=1.0           (one-way: total loss in return direction)
     """
 
@@ -225,8 +221,8 @@ class TestTopologyAsymmetricEdge(unittest.TestCase):
             edges=[
                 EdgeConfig(
                     a="tx", b="rx",
-                    loss=0.1, latency_ms=20.0, snr=8.0, rssi=-85.0,
-                    a_to_b=DirectionalOverrides(snr=14.0, rssi=-70.0),
+                    loss=0.1, latency_ms=20.0, snr=8.0,
+                    a_to_b=DirectionalOverrides(snr=14.0),
                     b_to_a=DirectionalOverrides(loss=1.0),
                 )
             ],
@@ -236,13 +232,10 @@ class TestTopologyAsymmetricEdge(unittest.TestCase):
         cls.tx_link = cls.topo.neighbours("tx")[0]   # tx → rx
         cls.rx_link = cls.topo.neighbours("rx")[0]   # rx → tx
 
-    # -- forward direction (tx → rx): SNR and RSSI overridden --
+    # -- forward direction (tx → rx): SNR overridden --
 
     def test_forward_snr_overridden(self):
         self.assertAlmostEqual(self.tx_link.snr, 14.0)
-
-    def test_forward_rssi_overridden(self):
-        self.assertAlmostEqual(self.tx_link.rssi, -70.0)
 
     def test_forward_loss_inherits_base(self):
         self.assertAlmostEqual(self.tx_link.loss, 0.1)
@@ -257,9 +250,6 @@ class TestTopologyAsymmetricEdge(unittest.TestCase):
 
     def test_reverse_snr_inherits_base(self):
         self.assertAlmostEqual(self.rx_link.snr, 8.0)
-
-    def test_reverse_rssi_inherits_base(self):
-        self.assertAlmostEqual(self.rx_link.rssi, -85.0)
 
     def test_reverse_latency_inherits_base(self):
         self.assertAlmostEqual(self.rx_link.latency_ms, 20.0)
@@ -282,7 +272,7 @@ class TestTopologySymmetricRegressionAfterChange(unittest.TestCase):
         cfg = TopologyConfig(
             nodes=[NodeConfig(name="p"), NodeConfig(name="q")],
             edges=[EdgeConfig(a="p", b="q", loss=0.2, latency_ms=30.0,
-                              snr=7.0, rssi=-88.0)],
+                              snr=7.0)],
             simulation=SimulationConfig(),
         )
         cls.topo = Topology(cfg)

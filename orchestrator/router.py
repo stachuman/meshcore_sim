@@ -234,7 +234,8 @@ class PacketRouter:
         if receiver is None:
             return
         self._metrics.record_rx(receiver_name)
-        await receiver.deliver_rx(hex_data.lower(), link.snr, link.rssi)
+        noise_floor = self._radio.noise_floor_dBm if self._radio else -120.0
+        await receiver.deliver_rx(hex_data.lower(), link.snr, link.snr + noise_floor)
 
     # ------------------------------------------------------------------
     # Replay drainer — background task

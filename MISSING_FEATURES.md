@@ -114,7 +114,7 @@ SimRadio TX timing.
 - Topology-graph-based delivery (adjacency = reachability)
 - Per-edge packet loss (probabilistic, memoryless)
 - Per-edge propagation delay (fixed latency_ms)
-- Per-edge SNR/RSSI (static, with directional overrides)
+- Per-edge SNR (static, with directional overrides; RSSI derived as SNR + noise_floor)
 - Airtime gating (delivery delayed by on-air time)
 - Collision detection via ChannelModel
 
@@ -179,7 +179,7 @@ SimRadio TX timing.
 - No jitter (latency variance)
 - No throughput (bytes/sec)
 - No MeshCore-internal retransmission counts
-- No per-hop SNR/RSSI recording (available in EdgeLink, not traced)
+- No per-hop SNR recording (available in EdgeLink, not traced)
 - No energy/power consumption model
 
 ### 4.5 Adversarial Modelling (adversarial.py)
@@ -336,7 +336,7 @@ incorporated into those models.
 | Message | Fields | Purpose |
 |---------|--------|---------|
 | `time` | `epoch: int` | Sync node clock |
-| `rx` | `hex: str, snr: float, rssi: float` | Deliver received packet |
+| `rx` | `hex: str, snr: float, rssi: float` | Deliver received packet (rssi = snr + noise_floor) |
 | `send_text` | `dest: str, text: str` | Trigger text message send |
 | `advert` | `name: str` | Trigger advertisement broadcast |
 | `quit` | (none) | Graceful shutdown |

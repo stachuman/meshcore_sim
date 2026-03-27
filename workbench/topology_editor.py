@@ -110,13 +110,9 @@ def _edge_edit_dialog(
             "Latency (ms)", value=edge.latency_ms, min=0, format="%.1f",
         ).classes("w-full")
 
-        with ui.row().classes("w-full gap-2"):
-            snr_input = ui.number(
-                "SNR (dB)", value=edge.snr, format="%.1f",
-            ).classes("flex-1")
-            rssi_input = ui.number(
-                "RSSI (dBm)", value=edge.rssi, format="%.1f",
-            ).classes("flex-1")
+        snr_input = ui.number(
+            "SNR (dB)", value=edge.snr, format="%.1f",
+        ).classes("w-full")
 
         # -- Directional overrides (expandable) --
         with ui.expansion("Directional Overrides").classes("w-full"):
@@ -125,14 +121,12 @@ def _edge_edit_dialog(
             atob_loss = ui.number("Loss", value=atob.loss, format="%.2f").classes("w-full")
             atob_lat = ui.number("Latency ms", value=atob.latency_ms, format="%.1f").classes("w-full")
             atob_snr = ui.number("SNR dB", value=atob.snr, format="%.1f").classes("w-full")
-            atob_rssi = ui.number("RSSI dBm", value=atob.rssi, format="%.1f").classes("w-full")
 
             ui.label(f"B \u2192 A").classes("text-caption font-bold mt-2")
             btoa = edge.b_to_a or DirectionalOverrides()
             btoa_loss = ui.number("Loss", value=btoa.loss, format="%.2f").classes("w-full")
             btoa_lat = ui.number("Latency ms", value=btoa.latency_ms, format="%.1f").classes("w-full")
             btoa_snr = ui.number("SNR dB", value=btoa.snr, format="%.1f").classes("w-full")
-            btoa_rssi = ui.number("RSSI dBm", value=btoa.rssi, format="%.1f").classes("w-full")
 
         with ui.row().classes("w-full justify-end gap-2 mt-2"):
             if on_delete and not is_new:
@@ -151,19 +145,18 @@ def _edge_edit_dialog(
                 edge.loss = loss_input.value or 0.0
                 edge.latency_ms = latency_input.value or 0.0
                 edge.snr = snr_input.value if snr_input.value is not None else 6.0
-                edge.rssi = rssi_input.value if rssi_input.value is not None else -90.0
 
                 # Directional overrides (None if all fields empty)
-                def _build_dir(l, la, s, r):
-                    if all(v is None for v in (l.value, la.value, s.value, r.value)):
+                def _build_dir(l, la, s):
+                    if all(v is None for v in (l.value, la.value, s.value)):
                         return None
                     return DirectionalOverrides(
                         loss=l.value, latency_ms=la.value,
-                        snr=s.value, rssi=r.value,
+                        snr=s.value,
                     )
 
-                edge.a_to_b = _build_dir(atob_loss, atob_lat, atob_snr, atob_rssi)
-                edge.b_to_a = _build_dir(btoa_loss, btoa_lat, btoa_snr, btoa_rssi)
+                edge.a_to_b = _build_dir(atob_loss, atob_lat, atob_snr)
+                edge.b_to_a = _build_dir(btoa_loss, btoa_lat, btoa_snr)
                 on_save(edge, is_new)
                 dlg.close()
 
@@ -325,8 +318,6 @@ def _edge_row(state, edge, node_list_refresh, edge_list_refresh):
         params.append(f"{edge.latency_ms:.0f}ms")
     if edge.snr != 6.0:
         params.append(f"SNR:{edge.snr:.1f}")
-    if edge.rssi != -90.0:
-        params.append(f"RSSI:{edge.rssi:.0f}")
     has_dir = edge.a_to_b is not None or edge.b_to_a is not None
 
     with ui.column().classes(

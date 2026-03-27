@@ -237,7 +237,7 @@ traffic, and collects metrics.
 The topology is loaded from a JSON file containing `nodes`, `edges`, and
 `simulation` sections.  The `Topology` class builds a **directed adjacency
 graph**: each edge becomes two `EdgeLink` objects (one per direction), each
-carrying direction-specific loss, latency, SNR, and RSSI values.
+carrying direction-specific loss, latency, and SNR values.
 
 Asymmetric links are supported via `a_to_b` / `b_to_a` overrides in the
 edge JSON.  A fully one-way link is expressed as `"loss": 1.0` in one direction.
@@ -248,7 +248,8 @@ edge JSON.  A fully one-way link is expressed as `"loss": 1.0` in one direction.
 
 Each `NodeAgent` object owns one `asyncio.subprocess.Process`.  It provides:
 - `start()` / `wait_ready()` / `quit()` — lifecycle management.
-- `deliver_rx(hex, snr, rssi)` — write an `rx` command to the node's stdin.
+- `deliver_rx(hex, snr, rssi)` — write an `rx` command to the node's stdin
+  (RSSI is derived as `snr + noise_floor`).
 - `send_text(dest, text)` — write a `send_text` command.
 - `broadcast_advert(name)` — write an `advert` command.
 - A reader loop that parses every JSON line from stdout and dispatches events
@@ -352,7 +353,7 @@ All communication is **newline-delimited JSON** (one object per line).
 | `type` | Fields | Description |
 |--------|--------|-------------|
 | `time` | `epoch: int` | Set the simulated Unix epoch (sent once at startup) |
-| `rx` | `hex: str`, `snr: float`, `rssi: float` | Deliver a received packet |
+| `rx` | `hex: str`, `snr: float`, `rssi: float` | Deliver a received packet (rssi derived as snr + noise_floor) |
 | `send_text` | `dest: str`, `text: str` | Send encrypted text to a contact |
 | `advert` | `name: str` | Broadcast a self-advertisement |
 | `quit` | — | Shut down cleanly |
@@ -550,11 +551,10 @@ for other_id, (other_sender, other_start, other_end) in _active.items():
     - Temporal overlap                       ✓
     → Both packets are lost at relay_B too
 
-  With capture effect (lat/lon available, relay_A is 500m from bob,
-  relay_C is 2km from bob):
-    - relay_A RSSI: -10 * 3 * log10(500)  = -80.9 dB
-    - relay_C RSSI: -10 * 3 * log10(2000) = -99.0 dB
-    - Difference: 18.1 dB ≥ 6 dB threshold
+  With capture effect (edge SNR values differ):
+    - relay_A → bob SNR: 12.0 dB
+    - relay_C → bob SNR: -6.0 dB
+    - Difference: 18.0 dB ≥ 6 dB threshold
     → relay_A's packet SURVIVES at bob (capture effect)
 ```
 
@@ -569,18 +569,13 @@ receiver, so collision outcomes are correctly computed per link.
 
 ### Capture effect
 
-When all nodes have `lat`/`lon` coordinates, the model applies the **LoRa
-capture effect**: if the primary signal arrives at least 6 dB stronger than
-the interferer, it survives the collision.
+The model applies the **LoRa capture effect**: if the primary signal's edge
+SNR is at least 6 dB stronger than the interferer's edge SNR at the same
+receiver, the primary survives the collision.  SNR differences are equivalent
+to RSSI differences (the noise floor cancels out at the same receiver).
 
-Signal strength is estimated via log-distance path loss:
-```
-  RSSI_relative = -10 * n * log10(distance_metres)    (n = 3.0)
-```
-
-Distance is computed using the Haversine formula.  If the primary's relative
-RSSI exceeds the interferer's by >= 6 dB, the primary packet is delivered
-normally.  Without position data, every overlap is a hard collision.
+If both signals have equal SNR, neither captures and both are lost (hard
+collision).
 
 ---
 

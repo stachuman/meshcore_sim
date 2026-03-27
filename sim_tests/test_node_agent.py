@@ -196,7 +196,7 @@ class TestNodeAgentCommands(unittest.TestCase):
             await agent.wait_ready(timeout=5.0)
             # Send a dummy (non-parseable) packet — node will discard it,
             # but our counter is incremented by the orchestrator before delivery.
-            await agent.deliver_rx("deadbeef", snr=5.0, rssi=-90.0)
+            await agent.deliver_rx("deadbeef", snr=5.0, rssi=-115.0)
             await asyncio.sleep(0.05)
             count = agent.state.rx_count
             await agent.quit()
@@ -208,8 +208,8 @@ class TestNodeAgentCommands(unittest.TestCase):
             agent = NodeAgent(NodeConfig(name="rx_two"), _SIM)
             await agent.start()
             await agent.wait_ready(timeout=5.0)
-            await agent.deliver_rx("deadbeef", snr=5.0, rssi=-90.0)
-            await agent.deliver_rx("cafebabe", snr=5.0, rssi=-90.0)
+            await agent.deliver_rx("deadbeef", snr=5.0, rssi=-115.0)
+            await agent.deliver_rx("cafebabe", snr=5.0, rssi=-115.0)
             await asyncio.sleep(0.05)
             count = agent.state.rx_count
             await agent.quit()

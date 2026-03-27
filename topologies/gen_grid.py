@@ -41,7 +41,6 @@ def gen_grid(
     loss: float = 0.02,
     latency_ms: float = 20.0,
     snr: float = 8.0,
-    rssi: float = -85.0,
     warmup_secs: float = 10.0,
     duration_secs: float = 120.0,
     traffic_interval_secs: float = 10.0,
@@ -71,7 +70,6 @@ def gen_grid(
                     "loss": loss,
                     "latency_ms": latency_ms,
                     "snr": snr,
-                    "rssi": rssi,
                 })
             # Vertical: (r,c) ↔ (r+1, c)
             if r + 1 < rows:
@@ -81,7 +79,6 @@ def gen_grid(
                     "loss": loss,
                     "latency_ms": latency_ms,
                     "snr": snr,
-                    "rssi": rssi,
                 })
 
     return {
@@ -123,8 +120,6 @@ def main() -> None:
                    help="One-way propagation delay ms per hop (default 20)")
     p.add_argument("--snr",     type=float, default=8.0,
                    help="SNR dB (default 8)")
-    p.add_argument("--rssi",    type=float, default=-85.0,
-                   help="RSSI dBm (default -85)")
     p.add_argument("--warmup",           type=float, default=10.0,
                    help="Warmup secs before traffic starts (default 10)")
     p.add_argument("--duration",         type=float, default=120.0,
@@ -146,7 +141,6 @@ def main() -> None:
         loss=args.loss,
         latency_ms=args.latency,
         snr=args.snr,
-        rssi=args.rssi,
         warmup_secs=args.warmup,
         duration_secs=args.duration,
         traffic_interval_secs=args.traffic_interval,

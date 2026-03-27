@@ -293,7 +293,6 @@ def _render_edge_detail(state: AppState, key: tuple) -> None:
                     ui.label(f"Loss: {loss_pct}").classes("text-body2")
                     ui.label(f"Latency: {edge.latency_ms:.1f} ms").classes("text-body2")
                     ui.label(f"SNR: {edge.snr:.1f} dB").classes("text-body2")
-                    ui.label(f"RSSI: {edge.rssi:.1f} dBm").classes("text-body2")
                     break
 
         # Trace stats
@@ -496,6 +495,7 @@ def _render_summary_stats(stats: dict) -> None:
             with ui.card().classes("w-full"):
                 ui.label("Drops").classes("text-subtitle2")
                 for key, label in [
+                    ("snr_below_threshold", "SNR below threshold"),
                     ("collisions", "RF collisions"),
                     ("halfduplex", "Half-duplex"),
                     ("link_loss", "Link loss"),

@@ -110,12 +110,12 @@ def _build_topology(binary: str) -> TopologyConfig:
             if c + 1 < _COLS:
                 edges.append(EdgeConfig(
                     a=f"n_{r}_{c}", b=f"n_{r}_{c+1}",
-                    loss=0.02, latency_ms=20.0, snr=8.0, rssi=-85.0,
+                    loss=0.02, latency_ms=20.0, snr=8.0,
                 ))
             if r + 1 < _ROWS:
                 edges.append(EdgeConfig(
                     a=f"n_{r}_{c}", b=f"n_{r+1}_{c}",
-                    loss=0.02, latency_ms=20.0, snr=8.0, rssi=-85.0,
+                    loss=0.02, latency_ms=20.0, snr=8.0,
                 ))
 
     sim = SimulationConfig(

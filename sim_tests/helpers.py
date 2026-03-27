@@ -70,8 +70,8 @@ def linear_three_config(**sim_overrides) -> TopologyConfig:
             NodeConfig(name="bob",    relay=False),
         ],
         edges=[
-            EdgeConfig(a="alice",  b="relay1", loss=0.05, latency_ms=20.0, snr=8.0, rssi=-85.0),
-            EdgeConfig(a="relay1", b="bob",    loss=0.05, latency_ms=20.0, snr=8.0, rssi=-85.0),
+            EdgeConfig(a="alice",  b="relay1", loss=0.05, latency_ms=20.0, snr=8.0),
+            EdgeConfig(a="relay1", b="bob",    loss=0.05, latency_ms=20.0, snr=8.0),
         ],
         simulation=sim,
         radio=_DEFAULT_RADIO,
@@ -99,7 +99,7 @@ def two_node_direct_config(**sim_overrides) -> TopologyConfig:
             NodeConfig(name="bob",   relay=False),
         ],
         edges=[
-            EdgeConfig(a="alice", b="bob", loss=0.0, latency_ms=0.0, snr=10.0, rssi=-80.0),
+            EdgeConfig(a="alice", b="bob", loss=0.0, latency_ms=0.0, snr=10.0),
         ],
         simulation=sim,
         radio=_DEFAULT_RADIO,
@@ -134,12 +134,12 @@ def grid_topo_config(rows: int, cols: int, **sim_overrides) -> TopologyConfig:
             if c + 1 < cols:
                 edges.append(EdgeConfig(
                     a=_name(r, c), b=_name(r, c + 1),
-                    loss=0.02, latency_ms=20.0, snr=8.0, rssi=-85.0,
+                    loss=0.02, latency_ms=20.0, snr=8.0,
                 ))
             if r + 1 < rows:
                 edges.append(EdgeConfig(
                     a=_name(r, c), b=_name(r + 1, c),
-                    loss=0.02, latency_ms=20.0, snr=8.0, rssi=-85.0,
+                    loss=0.02, latency_ms=20.0, snr=8.0,
                 ))
 
     sim = SimulationConfig(
@@ -177,8 +177,8 @@ def adversarial_config(mode: str, probability: float = 1.0, **adv_extras) -> Top
             NodeConfig(name="receiver",  relay=False),
         ],
         edges=[
-            EdgeConfig(a="sender",    b="evil_relay", loss=0.0, latency_ms=0.0, snr=9.0, rssi=-82.0),
-            EdgeConfig(a="evil_relay", b="receiver",  loss=0.0, latency_ms=0.0, snr=9.0, rssi=-82.0),
+            EdgeConfig(a="sender",    b="evil_relay", loss=0.0, latency_ms=0.0, snr=9.0),
+            EdgeConfig(a="evil_relay", b="receiver",  loss=0.0, latency_ms=0.0, snr=9.0),
         ],
         simulation=sim,
         radio=_DEFAULT_RADIO,

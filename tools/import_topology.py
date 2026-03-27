@@ -82,7 +82,6 @@ _REVERSE_SNR_PENALTY = 5.0  # dB
 
 # Companion link parameters (phone sitting next to repeater)
 _COMPANION_SNR = 12.0
-_COMPANION_RSSI = -60.0
 _COMPANION_LOSS = 0.02
 _COMPANION_LATENCY_MS = 5.0
 
@@ -168,12 +167,11 @@ def fit_propagation_model(
 ) -> tuple:
     """Fit SNR = a + b * log10(dist_km) from measured edges.
 
-    Returns (a, b, sigma, max_dist_km, mean_rssi).
+    Returns (a, b, sigma, max_dist_km).
     Falls back to hardcoded constants when < 5 measured edges with distance.
     """
-    # Collect (log10_dist, snr, rssi) for edges with source=neighbors|trace
+    # Collect (log10_dist, snr) for edges with source=neighbors|trace
     points = []  # (log10_dist, snr)
-    rssi_vals = []
     max_dist = 0.0
 
     # Build prefix→node lookup by name
@@ -196,12 +194,6 @@ def fit_propagation_model(
         points.append((math.log10(dist), snr))
         max_dist = max(max_dist, dist)
 
-        rssi = e.get("rssi")
-        if rssi is not None:
-            rssi_vals.append(float(rssi))
-
-    mean_rssi = sum(rssi_vals) / len(rssi_vals) if rssi_vals else -90.0
-
     if len(points) < _MIN_EDGES_FOR_FIT:
         # Not enough data — fall back to hardcoded model
         a = _SNR_REF
@@ -215,7 +207,7 @@ def fit_propagation_model(
                   file=sys.stderr)
             print(f"    SNR = {a:.1f} + {b:.1f}*log10(d), sigma={sigma:.1f} dB",
                   file=sys.stderr)
-        return (a, b, sigma, max_dist, mean_rssi)
+        return (a, b, sigma, max_dist)
 
     # Linear regression: SNR = a + b * log10(dist)
     n = len(points)
@@ -247,11 +239,10 @@ def fit_propagation_model(
         print(f"  Propagation model: SNR = {a:.1f} + {b:.1f}*log10(d), "
               f"sigma={sigma:.1f} dB (fitted from {n} edges)",
               file=sys.stderr)
-        print(f"    Max measured distance: {max_dist:.1f} km, "
-              f"mean RSSI: {mean_rssi:.1f} dBm",
+        print(f"    Max measured distance: {max_dist:.1f} km",
               file=sys.stderr)
 
-    return (a, b, sigma, max_dist, mean_rssi)
+    return (a, b, sigma, max_dist)
 
 
 # ---------------------------------------------------------------------------
@@ -393,7 +384,6 @@ def import_topology(
             "loss": loss_ab,
             "latency_ms": 20.0,
             "snr": round(snr_a_to_b, 2),
-            "rssi": -90.0,
         }
 
         # Add directional overrides if the two directions differ
@@ -422,7 +412,7 @@ def import_topology(
 
     if fill_gaps:
         # Fit propagation model from measured edges
-        model_a, model_b, sigma, max_measured_dist, mean_rssi = \
+        model_a, model_b, sigma, max_measured_dist = \
             fit_propagation_model(
                 merged_edges, nodes,
                 sigma_override=gap_sigma,
@@ -496,16 +486,12 @@ def import_topology(
 
                 loss = snr_to_loss(snr_est)
 
-                # RSSI: use mean measured RSSI with proportional noise
-                rssi_est = mean_rssi + rng.gauss(0.0, sigma / 2.0)
-
                 merged_edges.append({
                     "a": nodes[p1]["name"],
                     "b": nodes[p2]["name"],
                     "loss": loss,
                     "latency_ms": 20.0,
                     "snr": round(snr_est, 2),
-                    "rssi": round(rssi_est, 1),
                 })
                 edge_set.add(frozenset([p1, p2]))
                 total_count[p1] = t1 + 1
@@ -559,7 +545,6 @@ def import_topology(
                     "a": comp_name,
                     "b": relay_name,
                     "snr": _COMPANION_SNR,
-                    "rssi": _COMPANION_RSSI,
                     "loss": _COMPANION_LOSS,
                     "latency_ms": _COMPANION_LATENCY_MS,
                 })

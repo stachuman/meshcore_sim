@@ -60,10 +60,10 @@ def _room_server_star_config() -> TopologyConfig:
         NodeConfig(name="room",  room_server=True),
     ]
     edges = [
-        EdgeConfig(a="alice", b="relay", loss=0.0, latency_ms=0.0, snr=10.0, rssi=-80.0),
-        EdgeConfig(a="bob",   b="relay", loss=0.0, latency_ms=0.0, snr=10.0, rssi=-80.0),
-        EdgeConfig(a="carol", b="relay", loss=0.0, latency_ms=0.0, snr=10.0, rssi=-80.0),
-        EdgeConfig(a="relay", b="room",  loss=0.0, latency_ms=0.0, snr=10.0, rssi=-80.0),
+        EdgeConfig(a="alice", b="relay", loss=0.0, latency_ms=0.0, snr=10.0),
+        EdgeConfig(a="bob",   b="relay", loss=0.0, latency_ms=0.0, snr=10.0),
+        EdgeConfig(a="carol", b="relay", loss=0.0, latency_ms=0.0, snr=10.0),
+        EdgeConfig(a="relay", b="room",  loss=0.0, latency_ms=0.0, snr=10.0),
     ]
     return TopologyConfig(nodes=nodes, edges=edges, simulation=sim)
 

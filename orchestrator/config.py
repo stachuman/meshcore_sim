@@ -42,7 +42,6 @@ class DirectionalOverrides:
     loss:       Optional[float] = None
     latency_ms: Optional[float] = None
     snr:        Optional[float] = None
-    rssi:       Optional[float] = None
 
 
 @dataclass
@@ -52,7 +51,6 @@ class EdgeConfig:
     loss: float = 0.0         # packet loss probability [0, 1]
     latency_ms: float = 0.0   # one-way propagation delay
     snr: float = 6.0          # SNR delivered to receiver (dB)
-    rssi: float = -90.0       # RSSI delivered to receiver (dBm)
     # Optional per-direction overrides.  None means "use the symmetric default".
     # a_to_b: parameters as seen by b when a transmits.
     # b_to_a: parameters as seen by a when b transmits.
@@ -75,6 +73,7 @@ class RadioConfig:
     bw_hz: int = 250_000     # bandwidth in Hz; MeshCore default 250 kHz
     cr: int = 1              # coding-rate offset: 1=CR4/5, 2=CR4/6, 3=CR4/7, 4=CR4/8
     preamble_symbols: int = 8
+    noise_floor_dBm: float = -120.0  # noise floor for RSSI derivation (RSSI = SNR + noise_floor)
 
 
 @dataclass
@@ -109,7 +108,6 @@ def _parse_directional(raw: dict) -> Optional[DirectionalOverrides]:
         loss=       float(raw["loss"])       if "loss"       in raw else None,
         latency_ms= float(raw["latency_ms"]) if "latency_ms" in raw else None,
         snr=        float(raw["snr"])        if "snr"        in raw else None,
-        rssi=       float(raw["rssi"])       if "rssi"       in raw else None,
     )
 
 
@@ -157,7 +155,6 @@ def topology_to_dict(topo: "TopologyConfig") -> dict:
         if o.loss       is not None: d["loss"]       = o.loss
         if o.latency_ms is not None: d["latency_ms"] = o.latency_ms
         if o.snr        is not None: d["snr"]        = o.snr
-        if o.rssi       is not None: d["rssi"]       = o.rssi
         return d or None
 
     edges_out = []
@@ -166,7 +163,6 @@ def topology_to_dict(topo: "TopologyConfig") -> dict:
         if e.loss       != 0.0:  ed["loss"]       = e.loss
         if e.latency_ms != 0.0:  ed["latency_ms"] = e.latency_ms
         if e.snr        != 6.0:  ed["snr"]        = e.snr
-        if e.rssi       != -90.0: ed["rssi"]      = e.rssi
         atob = _dir_overrides(e.a_to_b)
         btoa = _dir_overrides(e.b_to_a)
         if atob: ed["a_to_b"] = atob
@@ -237,7 +233,6 @@ def load_topology(path: str) -> TopologyConfig:
             loss=float(e.get("loss", 0.0)),
             latency_ms=float(e.get("latency_ms", 0.0)),
             snr=float(e.get("snr", 6.0)),
-            rssi=float(e.get("rssi", -90.0)),
             a_to_b=_parse_directional(e.get("a_to_b", {})),
             b_to_a=_parse_directional(e.get("b_to_a", {})),
         ))

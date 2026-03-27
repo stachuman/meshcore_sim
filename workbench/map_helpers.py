@@ -216,7 +216,6 @@ def _edge_popup_html(edge: EdgeConfig) -> str:
         f'<span style="color:#888">Loss:</span> {loss_pct}',
         f'<span style="color:#888">Latency:</span> {edge.latency_ms:.1f} ms',
         f'<span style="color:#888">SNR:</span> {edge.snr:.1f} dB',
-        f'<span style="color:#888">RSSI:</span> {edge.rssi:.1f} dBm',
     ]
     for label, ovr in [("A\u2192B", edge.a_to_b), ("B\u2192A", edge.b_to_a)]:
         if ovr is None:
@@ -228,8 +227,6 @@ def _edge_popup_html(edge: EdgeConfig) -> str:
             parts.append(f"lat={ovr.latency_ms:.1f}ms")
         if ovr.snr is not None:
             parts.append(f"snr={ovr.snr:.1f}")
-        if ovr.rssi is not None:
-            parts.append(f"rssi={ovr.rssi:.1f}")
         if parts:
             lines.append(f'<span style="color:#888">{label}:</span> {", ".join(parts)}')
     return '<br>'.join(lines)

@@ -12,7 +12,7 @@ I put attention to make radio as much realistic as possible - through -
 - Node binary connected to simulated radio in missing touch points (e.g. missing retry, duty cycle, tx airtime.
 - Listen before TX
 - Realistic Advert
-- SNR and RSSI reception model implemented (in topology we define SNR)
+- SNR reception model implemented (in topology we define SNR; RSSI is derived as SNR + noise_floor)
 - ...
 More details in attached documentation.
 
@@ -21,7 +21,7 @@ More details in attached documentation.
 A simulator for [MeshCore](https://github.com/meshcore-dev/MeshCore) mesh
 networks.  Each simulated node runs the **real MeshCore C++ routing and
 cryptography code** as a standalone subprocess; a Python orchestrator connects
-them over simulated radio links with configurable loss, latency, SNR, RSSI,
+them over simulated radio links with configurable loss, latency, SNR,
 RF collisions, and adversarial behaviour.
 
 [What changed vs upstream](#what-changed-vs-upstream) below.
@@ -314,7 +314,6 @@ an optional `radio` section.
 | `loss` | float | `0.0` | Packet loss probability [0-1] |
 | `latency_ms` | float | `0.0` | One-way propagation delay (ms) |
 | `snr` | float | `6.0` | Signal-to-noise ratio (dB) |
-| `rssi` | float | `-90.0` | Received signal strength (dBm) |
 | `a_to_b`, `b_to_a` | object | -- | Per-direction overrides for asymmetric links |
 
 ### Radio section
@@ -325,6 +324,7 @@ an optional `radio` section.
 | `bw_hz` | int | `250000` | Bandwidth in Hz |
 | `cr` | int | `1` | Coding-rate offset (1=CR4/5 ... 4=CR4/8) |
 | `preamble_symbols` | int | `8` | Preamble symbols |
+| `noise_floor_dBm` | float | `-120.0` | Noise floor for RSSI derivation (RSSI = SNR + noise_floor) |
 
 ---
 

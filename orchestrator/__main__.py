@@ -83,14 +83,14 @@ async def run(args: object) -> int:
     # radio section.
     radio = topo_cfg.radio or RadioConfig()
 
-    link_rssi: dict[str, dict[str, float]] = {}
+    link_snr: dict[str, dict[str, float]] = {}
     for name in topology.all_names():
-        link_rssi[name] = {
-            link.other: link.rssi
+        link_snr[name] = {
+            link.other: link.snr
             for link in topology.neighbours(name)
         }
-    channel = ChannelModel(link_rssi=link_rssi)
-    log.info("RF contention: capture effect using edge RSSI (6 dB threshold)")
+    channel = ChannelModel(link_snr=link_snr)
+    log.info("RF contention: capture effect using edge SNR (6 dB threshold)")
 
     log.info(
         "RF: SF=%d  BW=%d Hz  CR=4/%d",

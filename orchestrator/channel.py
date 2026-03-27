@@ -2,13 +2,16 @@
 channel.py — RF channel model for LoRa contention simulation.
 
 Models simultaneous-transmission collisions at shared receivers using the
-explicit RSSI values defined on topology edges.
+SNR values defined on topology edges.
 
 Capture effect (default capture_threshold_db=6.0):
     If the primary signal arrives at least ``capture_threshold_db`` stronger
-    than any interferer (comparing edge RSSI values at the receiver), it is
+    than any interferer (comparing edge SNR values at the receiver), it is
     still decoded correctly.  This matches empirically measured LoRa behaviour
     (Semtech AN1200.22, co-channel rejection ~6 dB for same-SF collisions).
+
+Note: capture-effect comparison uses SNR differences, which are equivalent
+to RSSI differences (noise floor cancels out at the same receiver).
 """
 
 from __future__ import annotations
@@ -28,22 +31,23 @@ class ChannelModel:
 
     def __init__(
         self,
-        link_rssi: dict[str, dict[str, float]],
+        link_snr: dict[str, dict[str, float]],
         capture_threshold_db: float = 6.0,
     ) -> None:
         """
         Parameters
         ----------
-        link_rssi
-            ``{sender_name: {receiver_name: rssi_dBm}}``.  Built from
+        link_snr
+            ``{sender_name: {receiver_name: snr_dB}}``.  Built from
             topology edges; directional overrides are already resolved.
             Serves double duty: key existence implies reachability, and the
-            value is used for capture-effect power comparison.
+            value is used for capture-effect power comparison (SNR differences
+            are equivalent to RSSI differences at the same receiver).
         capture_threshold_db
             Minimum power advantage (dB) for the primary signal to survive a
             collision (default 6 dB, consistent with LoRa datasheets).
         """
-        self._link_rssi = link_rssi
+        self._link_snr = link_snr
         self._cap_db    = capture_threshold_db
 
         # tx_id → (sender_name, tx_start, tx_end)
@@ -90,12 +94,12 @@ class ChannelModel:
 
         A collision requires all three of:
 
-        1. The interfering sender can reach *receiver* (has an edge with RSSI).
+        1. The interfering sender can reach *receiver* (has an edge with SNR).
         2. The interfering TX window overlaps ``[tx_start, tx_end]``.
         3. The primary signal is not sufficiently stronger than the interferer
-           (capture effect: primary RSSI - interferer RSSI >= threshold).
+           (capture effect: primary SNR - interferer SNR >= threshold).
         """
-        primary_rssi = self._link_rssi.get(primary_sender, {}).get(receiver)
+        primary_snr = self._link_snr.get(primary_sender, {}).get(receiver)
 
         for other_id, (sender, start, end) in self._active.items():
             if other_id == tx_id:
@@ -108,13 +112,13 @@ class ChannelModel:
                 continue
 
             # Spatial reachability: can the interferer reach this receiver?
-            interferer_rssi = self._link_rssi.get(sender, {}).get(receiver)
-            if interferer_rssi is None:
+            interferer_snr = self._link_snr.get(sender, {}).get(receiver)
+            if interferer_snr is None:
                 continue
 
             # Capture effect: primary survives if sufficiently stronger
-            if primary_rssi is not None:
-                if primary_rssi - interferer_rssi >= self._cap_db:
+            if primary_snr is not None:
+                if primary_snr - interferer_snr >= self._cap_db:
                     continue  # primary captures
 
             return True  # collision — packet lost at this receiver

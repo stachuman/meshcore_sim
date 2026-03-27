@@ -48,7 +48,6 @@ class TestDataclassDefaults(unittest.TestCase):
         self.assertEqual(e.loss, 0.0)
         self.assertEqual(e.latency_ms, 0.0)
         self.assertEqual(e.snr, 6.0)
-        self.assertEqual(e.rssi, -90.0)
 
     def test_simulation_config_defaults(self):
         s = SimulationConfig()
@@ -103,10 +102,6 @@ class TestLoadTopologyLinearThree(unittest.TestCase):
     def test_edge_snr(self):
         for e in self.topo.edges:
             self.assertAlmostEqual(e.snr, 8.0)
-
-    def test_edge_rssi(self):
-        for e in self.topo.edges:
-            self.assertAlmostEqual(e.rssi, -85.0)
 
     def test_simulation_warmup(self):
         self.assertAlmostEqual(self.topo.simulation.warmup_secs, 5.0)
@@ -291,21 +286,18 @@ class TestDirectionalOverridesDataclass(unittest.TestCase):
         self.assertIsNone(d.loss)
         self.assertIsNone(d.latency_ms)
         self.assertIsNone(d.snr)
-        self.assertIsNone(d.rssi)
 
     def test_partial_fields_set(self):
         d = DirectionalOverrides(loss=0.9)
         self.assertAlmostEqual(d.loss, 0.9)
         self.assertIsNone(d.snr)
         self.assertIsNone(d.latency_ms)
-        self.assertIsNone(d.rssi)
 
     def test_all_fields_set(self):
-        d = DirectionalOverrides(loss=0.1, latency_ms=5.0, snr=12.0, rssi=-70.0)
+        d = DirectionalOverrides(loss=0.1, latency_ms=5.0, snr=12.0)
         self.assertAlmostEqual(d.loss, 0.1)
         self.assertAlmostEqual(d.latency_ms, 5.0)
         self.assertAlmostEqual(d.snr, 12.0)
-        self.assertAlmostEqual(d.rssi, -70.0)
 
     def test_edge_config_directional_fields_default_none(self):
         e = EdgeConfig(a="x", b="y")
@@ -334,7 +326,7 @@ class TestLoadTopologyAsymmetricEdge(unittest.TestCase):
         base = {
             "nodes": [{"name": "x"}, {"name": "y"}],
             "edges": [{"a": "x", "b": "y", "loss": 0.1,
-                       "latency_ms": 20.0, "snr": 8.0, "rssi": -85.0}],
+                       "latency_ms": 20.0, "snr": 8.0}],
         }
         base["edges"][0].update(extras)
         return base
@@ -370,15 +362,14 @@ class TestLoadTopologyAsymmetricEdge(unittest.TestCase):
         topo = self._load(self._edge_with(a_to_b={}))
         self.assertIsNone(topo.edges[0].a_to_b)
 
-    def test_all_four_directional_fields_parseable(self):
+    def test_all_three_directional_fields_parseable(self):
         topo = self._load(self._edge_with(
-            a_to_b={"loss": 0.2, "latency_ms": 10.0, "snr": 12.0, "rssi": -70.0}
+            a_to_b={"loss": 0.2, "latency_ms": 10.0, "snr": 12.0}
         ))
         d = topo.edges[0].a_to_b
         self.assertAlmostEqual(d.loss,       0.2)
         self.assertAlmostEqual(d.latency_ms, 10.0)
         self.assertAlmostEqual(d.snr,        12.0)
-        self.assertAlmostEqual(d.rssi,       -70.0)
 
     def test_asymmetric_hill_topology_loads(self):
         topo = load_topology(os.path.join(TOPO_DIR, "asymmetric_hill.json"))

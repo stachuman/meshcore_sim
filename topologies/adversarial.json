@@ -8,8 +8,12 @@
     "preamble_symbols": 8
   },
   "nodes": [
-    { "name": "sender",    "relay": false },
-    { "name": "evil_relay",
+    {
+      "name": "sender",
+      "relay": false
+    },
+    {
+      "name": "evil_relay",
       "relay": true,
       "adversarial": {
         "mode": "corrupt",
@@ -17,11 +21,26 @@
         "corrupt_byte_count": 2
       }
     },
-    { "name": "receiver",  "relay": false }
+    {
+      "name": "receiver",
+      "relay": false
+    }
   ],
   "edges": [
-    { "a": "sender",    "b": "evil_relay", "loss": 0.0, "latency_ms": 10, "snr": 9.0, "rssi": -82.0 },
-    { "a": "evil_relay", "b": "receiver",  "loss": 0.0, "latency_ms": 10, "snr": 9.0, "rssi": -82.0 }
+    {
+      "a": "sender",
+      "b": "evil_relay",
+      "loss": 0.0,
+      "latency_ms": 10,
+      "snr": 9.0
+    },
+    {
+      "a": "evil_relay",
+      "b": "receiver",
+      "loss": 0.0,
+      "latency_ms": 10,
+      "snr": 9.0
+    }
   ],
   "simulation": {
     "warmup_secs": 5,

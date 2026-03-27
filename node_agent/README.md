@@ -83,7 +83,7 @@ payloads are hex-encoded.
 
 | `type` | Additional fields | Description |
 |--------|-------------------|-------------|
-| `rx` | `hex`, `snr` (float dB), `rssi` (float dBm) | Deliver a raw over-the-air packet to this node's radio queue |
+| `rx` | `hex`, `snr` (float dB), `rssi` (float dBm, derived as `snr + noise_floor`) | Deliver a raw over-the-air packet to this node's radio queue |
 | `rx_start` | `duration_ms` (uint32) | Notify the radio that a preamble has been detected; marks `isReceiving()` true for `duration_ms`, enabling Listen-Before-Talk (Dispatcher defers TX while the channel is busy) |
 | `time` | `epoch` (uint32 Unix seconds) | Set / correct the node's RTC clock |
 | `send_text` | `dest` (pub-key hex prefix), `text` (UTF-8) | Send an encrypted text message to a known contact |

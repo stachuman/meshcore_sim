@@ -156,9 +156,9 @@ nearest-neighbour fallback to handle floating-point rounding.
 3. **Map roles** — `device_role = "repeater"` → `"relay": true`;
    `device_role = "room_server"` → `"room_server": true`; all others are
    plain endpoints.
-4. **Signal quality** — SNR and RSSI on each edge are the mean of the two
-   endpoint nodes' last-known values.  Loss defaults to 5 % (a reasonable
-   outdoor LoRa estimate; tune per-edge after export).
+4. **Signal quality** — SNR on each edge is the mean of the two endpoint
+   nodes' last-known values.  Loss defaults to 5 % (a reasonable outdoor
+   LoRa estimate; tune per-edge after export).
 5. **Write topology JSON** — edges are sorted by count descending so the
    strongest links appear first.
 
