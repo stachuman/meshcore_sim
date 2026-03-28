@@ -16,6 +16,9 @@ I put attention to make radio as much realistic as possible - through -
 - ...
 More details in attached documentation.
 
+![Simulation run](simulation-run.png)
+![Packet analysis](packet-analyze.png)
+
 ---
 
 A simulator for [MeshCore](https://github.com/meshcore-dev/MeshCore) mesh

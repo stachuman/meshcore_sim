@@ -22,12 +22,18 @@ SENDER_COLOUR   = "#f77f00"   # orange
 RECEIVER_COLOUR = "#2dc653"   # green
 RECEIVED_COLOUR = "#74b3ce"   # soft blue
 COLLISION_COLOUR = "#e63946"  # red
+HALFDUPLEX_COLOUR = "#ff9800"  # orange
 
 LABEL_LEN = 8
+LABEL_LEN_LONG = 20
 
 
 def short_name(name: str) -> str:
     return (name[:LABEL_LEN] + "\u2026") if len(name) > LABEL_LEN else name
+
+
+def medium_name(name: str) -> str:
+    return (name[:LABEL_LEN_LONG] + "\u2026") if len(name) > LABEL_LEN_LONG else name
 
 
 def node_role(n: NodeConfig) -> str:
@@ -147,12 +153,24 @@ def render_topology(
             )
             edge_layers.append((edge, layer))
 
-        # Draw node markers (draggable for editing)
+        # Draw node markers coloured by role
         for node in topo.nodes:
             pos = positions.get(node.name)
             if pos is None:
                 continue
-            marker = leaflet_map.marker(latlng=pos).draggable()
+            role = node_role(node)
+            colour = ROLE_COLOUR.get(role, ROLE_COLOUR["endpoint"])
+            marker = leaflet_map.generic_layer(
+                name='circleMarker',
+                args=[list(pos), {
+                    "radius": 7,
+                    "fillColor": colour,
+                    "color": "white",
+                    "weight": 2,
+                    "opacity": 1,
+                    "fillOpacity": 0.9,
+                }],
+            )
             markers[node.name] = marker
 
     return {"markers": markers, "edges": edge_layers}
@@ -185,24 +203,45 @@ def _node_popup_html(node: NodeConfig, edges: list | None = None) -> str:
         lines.append(f'<span style="color:#888">Edges ({len(edges)}):</span>')
         for edge in edges:
             peer = edge.b if edge.a == node.name else edge.a
-            # SNR in direction from this node to peer
+            # TX direction: this node → peer
             if edge.a == node.name and edge.a_to_b and edge.a_to_b.snr is not None:
-                snr = edge.a_to_b.snr
+                tx_snr = edge.a_to_b.snr
             elif edge.b == node.name and edge.b_to_a and edge.b_to_a.snr is not None:
-                snr = edge.b_to_a.snr
+                tx_snr = edge.b_to_a.snr
             else:
-                snr = edge.snr
-            loss = edge.loss
+                tx_snr = edge.snr
+            tx_loss = edge.loss
             if edge.a == node.name and edge.a_to_b and edge.a_to_b.loss is not None:
-                loss = edge.a_to_b.loss
+                tx_loss = edge.a_to_b.loss
             elif edge.b == node.name and edge.b_to_a and edge.b_to_a.loss is not None:
-                loss = edge.b_to_a.loss
-            parts = [f'SNR:{snr:.1f}']
-            if loss > 0:
-                parts.append(f'L:{loss*100:.0f}%')
+                tx_loss = edge.b_to_a.loss
+            # RX direction: peer → this node
+            if edge.a == node.name and edge.b_to_a and edge.b_to_a.snr is not None:
+                rx_snr = edge.b_to_a.snr
+            elif edge.b == node.name and edge.a_to_b and edge.a_to_b.snr is not None:
+                rx_snr = edge.a_to_b.snr
+            else:
+                rx_snr = edge.snr
+            rx_loss = edge.loss
+            if edge.a == node.name and edge.b_to_a and edge.b_to_a.loss is not None:
+                rx_loss = edge.b_to_a.loss
+            elif edge.b == node.name and edge.a_to_b and edge.a_to_b.loss is not None:
+                rx_loss = edge.a_to_b.loss
+            tx_parts = [f'SNR:{tx_snr:.1f}']
+            if tx_loss > 0:
+                tx_parts.append(f'L:{tx_loss*100:.0f}%')
+            rx_parts = [f'SNR:{rx_snr:.1f}']
+            if rx_loss > 0:
+                rx_parts.append(f'L:{rx_loss*100:.0f}%')
+            peer_short = _escape_html(short_name(peer))
+            span = '<span style="color:#aaa;font-size:0.9em">'
             lines.append(
-                f'&nbsp;\u2192 {_escape_html(short_name(peer))}'
-                f' <span style="color:#aaa;font-size:0.9em">{" ".join(parts)}</span>'
+                f'&nbsp;\u2192 {peer_short}'
+                f' {span}{" ".join(tx_parts)}</span>'
+            )
+            lines.append(
+                f'&nbsp;\u2190 {peer_short}'
+                f' {span}{" ".join(rx_parts)}</span>'
             )
     return '<br>'.join(lines)
 

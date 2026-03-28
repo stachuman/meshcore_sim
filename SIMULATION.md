@@ -27,6 +27,8 @@ simulated, how, and where the simulation may diverge from real hardware.
     - [Airtime calculation](#airtime-calculation)
     - [RF contention and collisions](#rf-contention-and-collisions)
     - [Capture effect](#capture-effect)
+    - [Preamble grace period](#preamble-grace-period)
+    - [FEC overlap tolerance](#fec-overlap-tolerance)
 7.  [What is real vs. what is simulated](#7-what-is-real-vs-what-is-simulated)
 8.  [Known limitations and divergences from reality](#8-known-limitations-and-divergences-from-reality)
 
@@ -52,9 +54,9 @@ simulated, how, and where the simulation may diverge from real hardware.
  │  └──────────────────────────────────┘    │ · TX window tracking   │  │
  │                                          │ · overlap detection     │  │
  │  ┌──────────────────────────────────┐    │ · capture effect        │  │
- │  │ MetricsCollector + PacketTracer  │    └────────────────────────┘  │
- │  │ · delivery rate, latency         │                                │
- │  │ · packet fingerprinting          │                                │
+ │  │ MetricsCollector + PacketTracer  │    │ · preamble grace period │  │
+ │  │ · delivery rate, latency         │    │ · FEC overlap tolerance │  │
+ │  │ · packet fingerprinting          │    └────────────────────────┘  │
  │  │ · witness/exposure counting      │                                │
  │  └──────────────────────────────────┘                                │
  │                                                                     │
@@ -332,8 +334,14 @@ The payload bytes are invariant across all hops (only the path field changes).
 
 For every observed packet:
 - `record_tx()` — creates/updates a `PacketTrace`, returns a `tx_id`.
+  Also stores the TX window `(sender, t_start, tx_end)` in `_tx_events` for
+  waterfall visualisation in the workbench.
 - `record_rx()` — adds a `HopRecord` to the trace.
-- `record_collision()` — adds a `CollisionRecord`.
+- `record_collision()` — adds a `CollisionRecord` with optional interferer
+  identification: `interferer` (sender name), `interferer_tx_id`, and
+  `overlap_s` (overlap duration in seconds).  These fields come from
+  `ChannelModel.is_lost()`, which returns the interfering sender's identity
+  and the overlap duration when a collision is detected.
 
 This gives us:
 - **Witness count** — how many (sender, receiver) pairs observed a packet.
@@ -341,6 +349,8 @@ This gives us:
 - **Relay delays** — time between receiving a packet and retransmitting it.
 - **Flood propagation time** — first TX to last delivery.
 - **Channel utilization** — total airtime as a fraction of simulation time.
+- **Collision root cause** — which node's transmission caused each collision
+  and how long the signals overlapped.
 
 ---
 
@@ -493,34 +503,76 @@ that started during our airtime window are already registered.
 #### Step 3: Collision check (`ChannelModel.is_lost()`)
 
 For each packet being delivered to a receiver, `is_lost()` iterates over
-**all active transmissions** and checks three conditions:
+**all active transmissions** and applies a multi-stage survival check.  A
+packet must fail **all** survival stages to be declared lost.
+
+`is_lost()` returns `None` when the packet survives (no collision), or a
+tuple `(interferer_sender, interferer_tx_id, overlap_s)` when the packet
+is lost.  Since `None` is falsy and tuples are truthy, existing boolean
+checks remain valid.  The interferer identity and overlap duration are
+propagated through to the `CollisionRecord` for workbench visualisation:
 
 ```python
+# Shift primary TX window to arrival time at receiver
+primary_lat = link_latency_ms[primary_sender][receiver] / 1000
+rx_start = tx_start + primary_lat
+rx_end   = tx_end   + primary_lat
+
 for other_id, (other_sender, other_start, other_end) in _active.items():
     # Skip: same TX event (self)
     if other_id == tx_id: continue
     # Skip: same sender, different packet (can't interfere with yourself)
     if other_sender == primary_sender: continue
 
-    # Condition 1: TEMPORAL OVERLAP
-    # Two windows [s1,e1] and [s2,e2] overlap iff s1 < e2 AND s2 < e1
-    if other_start >= tx_end or other_end <= tx_start:
-        continue  # no overlap
-
-    # Condition 2: SPATIAL REACHABILITY
+    # Precondition 1: SPATIAL REACHABILITY
     # The interferer must be able to reach this receiver
     if receiver not in neighbors[other_sender]:
         continue  # interferer can't reach this receiver
 
-    # Condition 3: CAPTURE EFFECT (only with lat/lon positions)
-    if positions available:
-        primary_rssi   = -10 * n * log10(dist(primary_sender, receiver))
-        interferer_rssi = -10 * n * log10(dist(other_sender, receiver))
-        if primary_rssi - interferer_rssi >= 6.0 dB:
-            continue  # primary signal strong enough to survive
+    # Precondition 2: TEMPORAL OVERLAP (at the receiver)
+    # Shift interferer TX window by its propagation delay to receiver
+    int_lat = link_latency_ms[other_sender][receiver] / 1000
+    int_rx_start = other_start + int_lat
+    int_rx_end   = other_end   + int_lat
+    if int_rx_start >= rx_end or int_rx_end <= rx_start:
+        continue  # no overlap at receiver
 
-    return True  # COLLISION — packet lost at this receiver
+    # Stage 1: CAPTURE EFFECT (edge SNR comparison)
+    primary_snr    = link_snr[primary_sender][receiver]
+    interferer_snr = link_snr[other_sender][receiver]
+    if primary_snr - interferer_snr >= 6.0:  # dB
+        continue  # primary signal strong enough to survive
+
+    # Stage 2: PREAMBLE GRACE PERIOD (LoRaSim model)
+    # A LoRa receiver needs 5 of 8 preamble symbols to synchronize.
+    # If the interferer ends before the 5th preamble symbol, the
+    # primary can still lock on.
+    grace_s = (preamble_symbols - 5) * T_sym
+    if int_rx_end <= rx_start + grace_s:
+        continue  # interference only in non-critical preamble
+
+    # Stage 3: FEC OVERLAP TOLERANCE
+    # CR 4/7 and 4/8 use Hamming codes that correct 1 bit per codeword.
+    # With diagonal interleaving, ~1-2 symbol errors per block are
+    # correctable.  If the overlap is small enough, FEC saves the packet.
+    fec_tolerance_s = fec_symbols * T_sym  # 0 for CR 4/5 and 4/6
+    payload_start = rx_start + T_preamble
+    overlap_start = max(rx_start, int_rx_start)
+    overlap_end   = min(rx_end, int_rx_end)
+    overlap_s     = overlap_end - overlap_start
+
+    if overlap_start >= payload_start and overlap_s <= fec_tolerance_s:
+        continue  # FEC corrects small payload overlap
+    if overlap_start > rx_start + grace_s and overlap_s <= fec_tolerance_s:
+        continue  # FEC corrects small tail overlap
+
+    return (other_sender, other_id, overlap_s)  # COLLISION with interferer info
 ```
+
+The three stages are evaluated in order; the packet survives as soon as any
+stage succeeds.  When radio parameters (SF, BW, CR) are not provided to
+`ChannelModel`, stages 2 and 3 are disabled and the model falls back to the
+original binary overlap behaviour (any overlap past capture effect = collision).
 
 #### Concrete example
 
@@ -537,18 +589,17 @@ for other_id, (other_sender, other_start, other_end) in _active.items():
   If relay_A and relay_C retransmit at overlapping times:
     relay_A TX window: [1000 ms, 1443 ms]    (443 ms airtime)
     relay_C TX window: [1200 ms, 1643 ms]    (443 ms airtime)
-    Overlap: 1200 ms to 1443 ms = 243 ms
 
-  At bob:
-    - relay_A can reach bob (neighbour)  ✓
-    - relay_C can reach bob (neighbour)  ✓
-    - Temporal overlap                   ✓
+  At bob (latency: relay_A→bob = 20 ms, relay_C→bob = 50 ms):
+    - relay_A arrival: [1020 ms, 1463 ms]
+    - relay_C arrival: [1250 ms, 1693 ms]
+    - Overlap at bob: 1250 ms to 1463 ms = 213 ms  ✓
     → Both packets are lost at bob (hard collision)
 
-  At relay_B:
-    - relay_A can reach relay_B (neighbour)  ✓
-    - relay_C can reach relay_B (neighbour)  ✓
-    - Temporal overlap                       ✓
+  At relay_B (latency: relay_A→B = 10 ms, relay_C→B = 10 ms):
+    - relay_A arrival: [1010 ms, 1453 ms]
+    - relay_C arrival: [1210 ms, 1653 ms]
+    - Overlap at relay_B: 1210 ms to 1453 ms = 243 ms  ✓
     → Both packets are lost at relay_B too
 
   With capture effect (edge SNR values differ):
@@ -574,8 +625,39 @@ SNR is at least 6 dB stronger than the interferer's edge SNR at the same
 receiver, the primary survives the collision.  SNR differences are equivalent
 to RSSI differences (the noise floor cancels out at the same receiver).
 
-If both signals have equal SNR, neither captures and both are lost (hard
-collision).
+If both signals have equal SNR, neither captures — the packet proceeds to
+the preamble and FEC checks below.
+
+### Preamble grace period
+
+Based on the LoRaSim model (Lancaster University), a LoRa receiver needs
+only 5 of the standard 8 preamble symbols to achieve synchronization.
+The first `(preamble_symbols - 5) * T_sym` seconds of a packet's reception
+window are a "grace period": interference that ends within this window does
+not prevent the receiver from locking onto the primary signal.
+
+For EU Narrow defaults (SF8, BW 62.5 kHz): `T_sym = 4.096 ms`, grace
+period = `3 * 4.096 = 12.3 ms`.
+
+### FEC overlap tolerance
+
+LoRa coding rates CR 4/7 and CR 4/8 use Hamming codes that can correct
+1 bit error per codeword.  Due to LoRa's diagonal interleaving, 1 corrupted
+symbol translates to 1 bit error spread across SF codewords — correctable.
+
+At SIR close to 0 dB, each overlapping symbol has roughly a 50% probability
+of corruption.  This means ~2 overlapping symbols produce ~1 actual error,
+which is correctable.  The tolerance is:
+
+| Coding rate | FEC symbols | Correction capability |
+|-------------|-------------|-----------------------|
+| CR 4/5 (cr=1) | 0 | Detection only, no correction |
+| CR 4/6 (cr=2) | 0 | Detection only, no correction |
+| CR 4/7 (cr=3) | 1 | 1 correctable symbol per block |
+| CR 4/8 (cr=4) | 2 | 1 correctable + probabilistic margin |
+
+If the overlap at the edge of a payload (start or end) is within
+`fec_symbols * T_sym` seconds, the packet survives.
 
 ---
 
@@ -608,7 +690,7 @@ collision).
 | Radio propagation | Topology graph with per-link parameters | No continuous RF model; links are either connected or not |
 | Packet loss | Independent Bernoulli trial per delivery | Configurable per-link `loss` probability |
 | Propagation delay | `asyncio.sleep(latency_ms + airtime_ms)` | Wall-clock based; not perfectly deterministic |
-| RF collisions | Time-window overlap check at shared receivers | Overlap detection uses asyncio event-loop time |
+| RF collisions | Propagation-aware arrival-window overlap with preamble grace period and FEC tolerance | Three-stage: capture effect, preamble sync (LoRaSim), FEC correction (CR-dependent) |
 | Capture effect | Log-distance path loss from lat/lon | Simplified: no fading, multipath, or antenna gain |
 | Half-duplex | Node-level: `isInRecvMode()` returns false during TX; Orchestrator-level: `ChannelModel.is_receiver_busy()` drops packets arriving at a transmitting node | Both the C++ node and the Python orchestrator enforce half-duplex |
 | Channel utilization | Airtime bookkeeping in tracer | Measured, not enforced globally |
@@ -704,8 +786,10 @@ discarded by the orchestrator before they ever reach the node's stdin.
 
 ### Collision detection resolution
 
-The `ChannelModel` checks for overlapping TX windows using asyncio event-loop
-timestamps.  Because the event loop's time resolution is limited by the OS
+The `ChannelModel` checks for overlapping signal arrival windows at the
+receiver.  Each sender's TX window is shifted by its propagation latency to
+the receiver before comparing for overlap.  Because the event loop's time
+resolution is limited by the OS
 scheduler (typically ~1 ms on Linux), very short overlaps (<1 ms) may be missed.
 For LoRa packets with airtimes of hundreds of milliseconds this is negligible,
 but could matter for very short packets or high bandwidth settings.
@@ -765,7 +849,7 @@ It does **not** model:
 | ACK / retry behaviour | **High** | Real BaseChatMesh; confirmed by integration tests |
 | Retransmit delay distribution | **High** | Real formula with deterministic PRNG |
 | Airtime calculation | **High** | Semtech AN1200.13 formula; verified against Semtech calculator |
-| Collision detection | **Medium** | Correct algorithm but wall-clock timing introduces jitter |
+| Collision detection | **Medium-High** | Three-stage model (capture + preamble grace + FEC) matches LoRaSim and Semtech specs; wall-clock timing introduces minor jitter |
 | Duty-cycle enforcement | **Medium** | Real Dispatcher, but wall-clock timing may drift |
 | Absolute timing accuracy | **Low** | Wall-clock based; results vary across runs |
 | Half-duplex enforcement | **High** | Blocked at orchestrator level; packets arriving during TX are dropped |

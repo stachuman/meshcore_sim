@@ -54,6 +54,19 @@ class CollisionRecord:
     sender: str            # node that transmitted
     receiver: str          # intended receiver that did not get the packet
     tx_id: Optional[int]   # same tx_id as the corresponding record_tx() call
+    interferer: Optional[str] = None        # node whose TX caused the collision
+    interferer_tx_id: Optional[int] = None  # tx_id of the interfering transmission
+    overlap_s: float = 0.0                  # overlap duration in seconds
+
+
+@dataclass
+class HalfduplexRecord:
+    """One half-duplex drop: a delivery blocked because the receiver was TXing."""
+    t: float               # asyncio event-loop time when drop was detected
+    sender: str            # node that transmitted
+    receiver: str          # intended receiver that was busy transmitting
+    tx_id: Optional[int] = None          # tx_id of the blocked packet
+    blocker_tx_id: Optional[int] = None  # tx_id of the receiver's own TX
 
 
 @dataclass
@@ -65,6 +78,7 @@ class PacketTrace:
     first_sender:   str          # node that first transmitted this packet
     hops:           list[HopRecord]       = field(default_factory=list)
     collisions:     list[CollisionRecord] = field(default_factory=list)
+    halfduplex:     list[HalfduplexRecord] = field(default_factory=list)
 
     @property
     def witness_count(self) -> int:
@@ -130,7 +144,12 @@ class PacketTracer:
     # ------------------------------------------------------------------
 
     def record_tx(
-        self, sender: str, hex_data: str, t: float, airtime_ms: float = 0.0
+        self,
+        sender: str,
+        hex_data: str,
+        t: float,
+        airtime_ms: float = 0.0,
+        tx_end: Optional[float] = None,
     ) -> Optional[int]:
         """
         Register a TX event.  Creates a new PacketTrace if this fingerprint
@@ -139,6 +158,7 @@ class PacketTracer:
         cannot be decoded.
 
         airtime_ms — on-air duration of this broadcast (0.0 when not modelled).
+        tx_end    — absolute end time of the transmission (for waterfall display).
         """
         info = decode_packet(hex_data)
         if info is None:
@@ -153,7 +173,7 @@ class PacketTracer:
             )
         self._tx_counter += 1
         self._tx_airtime[self._tx_counter] = airtime_ms
-        self._tx_events[self._tx_counter] = (sender, t)
+        self._tx_events[self._tx_counter] = (sender, t, tx_end)
         return self._tx_counter
 
     def record_collision(
@@ -163,6 +183,9 @@ class PacketTracer:
         hex_data: str,
         t: float,
         tx_id: Optional[int] = None,
+        interferer: Optional[str] = None,
+        interferer_tx_id: Optional[int] = None,
+        overlap_s: float = 0.0,
     ) -> None:
         """
         Register an RF collision: a delivery was blocked because another
@@ -170,6 +193,7 @@ class PacketTracer:
         PacketRouter._deliver_to after the collision check fires.
 
         tx_id should be the value returned by the corresponding record_tx() call.
+        interferer / interferer_tx_id / overlap_s come from ChannelModel.is_lost().
         """
         info = decode_packet(hex_data)
         if info is None:
@@ -190,6 +214,44 @@ class PacketTracer:
             sender=sender,
             receiver=receiver,
             tx_id=tx_id,
+            interferer=interferer,
+            interferer_tx_id=interferer_tx_id,
+            overlap_s=overlap_s,
+        ))
+
+    def record_halfduplex(
+        self,
+        sender: str,
+        receiver: str,
+        hex_data: str,
+        t: float,
+        tx_id: Optional[int] = None,
+        blocker_tx_id: Optional[int] = None,
+    ) -> None:
+        """
+        Register a half-duplex drop: a delivery was blocked because the
+        receiver was transmitting at the time.  Called from
+        PacketRouter._deliver_to after the is_receiver_busy() check.
+        """
+        info = decode_packet(hex_data)
+        if info is None:
+            return
+        fp = packet_fingerprint(info)
+        trace = self._traces.get(fp)
+        if trace is None:
+            trace = PacketTrace(
+                fingerprint=fp,
+                payload_type=info.payload_type,
+                first_seen_at=t,
+                first_sender=sender,
+            )
+            self._traces[fp] = trace
+        trace.halfduplex.append(HalfduplexRecord(
+            t=t,
+            sender=sender,
+            receiver=receiver,
+            tx_id=tx_id,
+            blocker_tx_id=blocker_tx_id,
         ))
 
     def record_rx(
@@ -266,7 +328,7 @@ class PacketTracer:
                 ev = self._tx_events.get(tx_id)
                 if ev is None:
                     continue
-                sender, tx_time = ev
+                sender, tx_time = ev[0], ev[1]
                 if sender in first_rx and sender != trace.first_sender:
                     delay_ms = (tx_time - first_rx[sender]) * 1000.0
                     if delay_ms >= 0:
@@ -360,12 +422,25 @@ class PacketTracer:
                 ],
                 "collisions": [
                     {
-                        "t":        c.t,
-                        "sender":   c.sender,
-                        "receiver": c.receiver,
-                        "tx_id":    c.tx_id,
+                        "t":                c.t,
+                        "sender":           c.sender,
+                        "receiver":         c.receiver,
+                        "tx_id":            c.tx_id,
+                        "interferer":       c.interferer,
+                        "interferer_tx_id": c.interferer_tx_id,
+                        "overlap_s":        c.overlap_s,
                     }
                     for c in tr.collisions
+                ],
+                "halfduplex": [
+                    {
+                        "t":              hd.t,
+                        "sender":         hd.sender,
+                        "receiver":       hd.receiver,
+                        "tx_id":          hd.tx_id,
+                        "blocker_tx_id":  hd.blocker_tx_id,
+                    }
+                    for hd in tr.halfduplex
                 ],
             })
         # Sort by first_seen_at so the file reads chronologically
@@ -419,6 +494,21 @@ class PacketTracer:
 
         if timing:
             result["timing"] = timing
+
+        # Embed TX event windows for waterfall visualisation
+        tx_events_dict: dict = {}
+        for tid, ev in self._tx_events.items():
+            sender_name, t_start, t_end = ev[0], ev[1], ev[2]
+            entry: dict = {
+                "sender": sender_name,
+                "t_start": t_start,
+            }
+            if t_end is not None:
+                entry["t_end"] = t_end
+                entry["airtime_ms"] = (t_end - t_start) * 1000.0
+            tx_events_dict[str(tid)] = entry
+        if tx_events_dict:
+            result["tx_events"] = tx_events_dict
 
         # Embed MetricsCollector data (delivery, latency, drops, etc.)
         if metrics is not None:

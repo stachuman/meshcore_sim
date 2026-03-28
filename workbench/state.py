@@ -56,6 +56,9 @@ class AppState:
     _edge_trace_stats: Optional[dict] = None
     _refresh_detail_panel: Any = None
 
+    # -- TX waterfall --
+    _waterfall_visible: bool = False
+
     # -- Persistent results --
     _output_dir: str = "output"
     _available_runs: list = field(default_factory=list)

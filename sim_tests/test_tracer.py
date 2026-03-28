@@ -488,13 +488,14 @@ class TestPacketTracerTiming(unittest.TestCase):
     """Tests for the timing section: relay delay, flood propagation, airtime."""
 
     def test_tx_events_populated(self):
-        """record_tx stores (sender, time) in _tx_events."""
+        """record_tx stores (sender, time, tx_end) in _tx_events."""
         tracer = PacketTracer()
-        tx_id = tracer.record_tx("alice", _MSG_HOP0, 1.0)
+        tx_id = tracer.record_tx("alice", _MSG_HOP0, 1.0, tx_end=1.5)
         self.assertIn(tx_id, tracer._tx_events)
-        sender, t = tracer._tx_events[tx_id]
+        sender, t, t_end = tracer._tx_events[tx_id]
         self.assertEqual(sender, "alice")
         self.assertAlmostEqual(t, 1.0)
+        self.assertAlmostEqual(t_end, 1.5)
 
     def test_relay_delay_computation(self):
         """Relay that receives at t=0.5 and retransmits at t=0.8 has 300 ms delay."""
@@ -555,6 +556,99 @@ class TestPacketTracerTiming(unittest.TestCase):
         tracer.record_rx("alice", "bob", _DIRECT_MSG, 0.01, tx_id)
         report = tracer.report()
         self.assertNotIn("Timing:", report)
+
+
+class TestCollisionInterfererInfo(unittest.TestCase):
+    """Tests for enriched collision records with interferer info."""
+
+    def setUp(self):
+        self.tracer = PacketTracer()
+
+    def test_collision_record_has_interferer_fields(self):
+        tx_id = self.tracer.record_tx("alice", _MSG_HOP0, 0.0)
+        self.tracer.record_collision(
+            "alice", "relay1", _MSG_HOP0, 0.05, tx_id,
+            interferer="bob", interferer_tx_id=99, overlap_s=0.15,
+        )
+        tr = list(self.tracer.traces.values())[0]
+        c = tr.collisions[0]
+        self.assertEqual(c.interferer, "bob")
+        self.assertEqual(c.interferer_tx_id, 99)
+        self.assertAlmostEqual(c.overlap_s, 0.15)
+
+    def test_collision_record_defaults_to_none(self):
+        """Without interferer args, fields default to None / 0.0."""
+        tx_id = self.tracer.record_tx("alice", _MSG_HOP0, 0.0)
+        self.tracer.record_collision("alice", "relay1", _MSG_HOP0, 0.05, tx_id)
+        tr = list(self.tracer.traces.values())[0]
+        c = tr.collisions[0]
+        self.assertIsNone(c.interferer)
+        self.assertIsNone(c.interferer_tx_id)
+        self.assertAlmostEqual(c.overlap_s, 0.0)
+
+    def test_to_dict_includes_interferer_fields(self):
+        tx_id = self.tracer.record_tx("alice", _MSG_HOP0, 0.0)
+        self.tracer.record_collision(
+            "alice", "relay1", _MSG_HOP0, 0.05, tx_id,
+            interferer="bob", interferer_tx_id=99, overlap_s=0.123,
+        )
+        d = self.tracer.to_dict()
+        c = d["packets"][0]["collisions"][0]
+        self.assertEqual(c["interferer"], "bob")
+        self.assertEqual(c["interferer_tx_id"], 99)
+        self.assertAlmostEqual(c["overlap_s"], 0.123)
+
+    def test_to_dict_collision_interferer_none_when_absent(self):
+        tx_id = self.tracer.record_tx("alice", _MSG_HOP0, 0.0)
+        self.tracer.record_collision("alice", "relay1", _MSG_HOP0, 0.05, tx_id)
+        d = self.tracer.to_dict()
+        c = d["packets"][0]["collisions"][0]
+        self.assertIsNone(c["interferer"])
+        self.assertIsNone(c["interferer_tx_id"])
+        self.assertAlmostEqual(c["overlap_s"], 0.0)
+
+
+class TestTxEventsSerialisation(unittest.TestCase):
+    """Tests for tx_events section in to_dict()."""
+
+    def test_tx_events_present_in_to_dict(self):
+        tracer = PacketTracer()
+        tx_id = tracer.record_tx("alice", _MSG_HOP0, 1.0, tx_end=1.5)
+        d = tracer.to_dict()
+        self.assertIn("tx_events", d)
+        self.assertIn(str(tx_id), d["tx_events"])
+
+    def test_tx_events_fields(self):
+        tracer = PacketTracer()
+        tx_id = tracer.record_tx("alice", _MSG_HOP0, 1.0, airtime_ms=500.0, tx_end=1.5)
+        d = tracer.to_dict()
+        ev = d["tx_events"][str(tx_id)]
+        self.assertEqual(ev["sender"], "alice")
+        self.assertAlmostEqual(ev["t_start"], 1.0)
+        self.assertAlmostEqual(ev["t_end"], 1.5)
+        self.assertAlmostEqual(ev["airtime_ms"], 500.0)
+
+    def test_tx_events_without_tx_end(self):
+        """When tx_end is not provided, t_end and airtime_ms are absent."""
+        tracer = PacketTracer()
+        tx_id = tracer.record_tx("alice", _MSG_HOP0, 1.0)
+        d = tracer.to_dict()
+        ev = d["tx_events"][str(tx_id)]
+        self.assertEqual(ev["sender"], "alice")
+        self.assertAlmostEqual(ev["t_start"], 1.0)
+        self.assertNotIn("t_end", ev)
+        self.assertNotIn("airtime_ms", ev)
+
+    def test_tx_events_populated_preserves_relay_delay(self):
+        """Relay delay computation still works with 3-tuple tx_events."""
+        tracer = PacketTracer()
+        tx_id1 = tracer.record_tx("alice", _MSG_HOP0, 0.0, tx_end=0.5)
+        tracer.record_rx("alice", "relay1", _MSG_HOP0, 0.5, tx_id1)
+        tx_id2 = tracer.record_tx("relay1", _MSG_HOP1, 0.8, tx_end=1.3)
+        tracer.record_rx("relay1", "bob", _MSG_HOP1, 1.3, tx_id2)
+        delays = tracer.compute_relay_delays()
+        self.assertEqual(len(delays), 1)
+        self.assertAlmostEqual(delays[0], 300.0, places=0)
 
 
 if __name__ == "__main__":

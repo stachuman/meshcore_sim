@@ -99,9 +99,13 @@ def render_sidebar(state: AppState) -> None:
             label="Bandwidth",
         ).classes("w-full")
 
+        # Normalise CR: accept both offset (1-4) and RadioLib denominator (5-8)
+        cr_val = radio.cr
+        if cr_val not in CR_OPTIONS:
+            cr_val = max(1, min(4, cr_val - 4 if cr_val >= 5 else cr_val))
         cr_select = ui.select(
             options=CR_OPTIONS,
-            value=radio.cr,
+            value=cr_val,
             label="Coding Rate",
         ).classes("w-full")
 

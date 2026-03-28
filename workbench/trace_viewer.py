@@ -10,8 +10,8 @@ from nicegui import ui
 
 from .map_helpers import (
     ROLE_COLOUR, EDGE_COLOUR, SENDER_COLOUR, RECEIVER_COLOUR,
-    RECEIVED_COLOUR, COLLISION_COLOUR,
-    short_name, node_role, node_positions, compute_center_zoom,
+    RECEIVED_COLOUR, COLLISION_COLOUR, HALFDUPLEX_COLOUR,
+    short_name, medium_name, node_role, node_positions, compute_center_zoom,
 )
 from . import results as _results
 from .state import AppState
@@ -102,6 +102,20 @@ def _select_edge(state: AppState, key: tuple) -> None:
     _refresh_detail(state)
 
 
+def _jump_to_tx_id(state: AppState, target_tx_id: int) -> None:
+    """Find the packet containing a hop or collision with this tx_id and select it."""
+    packets = state.trace.get("packets", []) if state.trace else []
+    for pkt_idx, pkt in enumerate(packets):
+        for hop in pkt.get("hops", []):
+            if hop.get("tx_id") == target_tx_id:
+                _select_packet(state, pkt_idx)
+                return
+        for col in pkt.get("collisions", []):
+            if col.get("tx_id") == target_tx_id:
+                _select_packet(state, pkt_idx)
+                return
+
+
 def _refresh_detail(state: AppState) -> None:
     """Safely call the detail panel refresh if available."""
     fn = getattr(state, "_refresh_detail_panel", None)
@@ -157,6 +171,11 @@ def _render_packet_detail(state: AppState, pkt_idx: int) -> None:
             ui.label(f"Collisions: {n_col}").classes("text-body2").style(
                 f"color: {COLLISION_COLOUR}"
             )
+        n_hd = len(pkt.get("halfduplex", []))
+        if n_hd:
+            ui.label(f"Half-duplex drops: {n_hd}").classes("text-body2").style(
+                f"color: {HALFDUPLEX_COLOUR}"
+            )
 
         # Hop chain table
         steps = broadcast_steps(pkt)
@@ -195,10 +214,60 @@ def _render_packet_detail(state: AppState, pkt_idx: int) -> None:
             ).style(f"color: {COLLISION_COLOUR}")
             for col in collisions:
                 dt = col["t"] - pkt["first_seen_at"]
-                ui.label(
+                interferer = col.get("interferer")
+                overlap_s = col.get("overlap_s", 0)
+                int_tx_id = col.get("interferer_tx_id")
+
+                label_parts = [
                     f"{short_name(col['sender'])} \u2192 "
                     f"{short_name(col['receiver'])}  +{dt:.3f}s"
-                ).classes("text-body2").style(f"color: {COLLISION_COLOUR}")
+                ]
+                if interferer:
+                    overlap_ms = overlap_s * 1000
+                    label_parts.append(
+                        f"  [by {short_name(interferer)}, {overlap_ms:.0f}ms overlap]"
+                    )
+
+                with ui.row().classes("items-center gap-0"):
+                    ui.label("".join(label_parts)).classes(
+                        "text-body2"
+                    ).style(f"color: {COLLISION_COLOUR}")
+                    if int_tx_id is not None:
+                        ui.button(
+                            icon="arrow_forward",
+                            on_click=lambda _, tid=int_tx_id: _jump_to_tx_id(state, tid),
+                        ).props("flat dense round size=xs").tooltip(
+                            "Jump to interferer packet"
+                        )
+
+        # Half-duplex list
+        halfduplex_list = pkt.get("halfduplex", [])
+        if halfduplex_list:
+            ui.label("Half-duplex (receiver busy)").classes(
+                "text-caption text-grey q-mt-sm"
+            ).style(f"color: {HALFDUPLEX_COLOUR}")
+            for hd in halfduplex_list:
+                dt = hd["t"] - pkt["first_seen_at"]
+                blocker_tid = hd.get("blocker_tx_id")
+
+                label_parts = [
+                    f"{short_name(hd['sender'])} \u2192 "
+                    f"{short_name(hd['receiver'])}  +{dt:.3f}s"
+                ]
+                if blocker_tid is not None:
+                    label_parts.append(f"  [blocked by tx#{blocker_tid}]")
+
+                with ui.row().classes("items-center gap-0"):
+                    ui.label("".join(label_parts)).classes(
+                        "text-body2"
+                    ).style(f"color: {HALFDUPLEX_COLOUR}")
+                    if blocker_tid is not None:
+                        ui.button(
+                            icon="arrow_forward",
+                            on_click=lambda _, tid=blocker_tid: _jump_to_tx_id(state, tid),
+                        ).props("flat dense round size=xs").tooltip(
+                            "Jump to blocking TX"
+                        )
 
         # Clickable receiver list
         receivers = pkt.get("unique_receivers", [])
@@ -236,6 +305,11 @@ def _render_node_detail(state: AppState, name: str) -> None:
         if col_count:
             ui.label(f"Collisions: {col_count}").classes("text-body2").style(
                 f"color: {COLLISION_COLOUR}"
+            )
+        hd_count = nstats.get("halfduplex_involved", 0)
+        if hd_count:
+            ui.label(f"Half-duplex drops: {hd_count}").classes("text-body2").style(
+                f"color: {HALFDUPLEX_COLOUR}"
             )
 
         # Originated packets
@@ -304,6 +378,11 @@ def _render_edge_detail(state: AppState, key: tuple) -> None:
             if col_count:
                 ui.label(f"Collisions: {col_count}").classes("text-body2").style(
                     f"color: {COLLISION_COLOUR}"
+                )
+            hd_count = estats.get("halfduplex_count", 0)
+            if hd_count:
+                ui.label(f"Half-duplex drops: {hd_count}").classes("text-body2").style(
+                    f"color: {HALFDUPLEX_COLOUR}"
                 )
             pkts = estats.get("packets", [])
             if pkts:
@@ -443,6 +522,9 @@ def _render_summary_stats(stats: dict) -> None:
         if stats["n_collisions"] > 0:
             _stat_row("Collisions", str(stats["n_collisions"]),
                        color=COLLISION_COLOUR)
+        if stats.get("n_halfduplex", 0) > 0:
+            _stat_row("Half-duplex", str(stats["n_halfduplex"]),
+                       color=HALFDUPLEX_COLOUR)
 
     # -- Message delivery (from embedded metrics) --
     if metrics:
@@ -641,6 +723,9 @@ def _sidebar_content(state: AppState) -> None:
         with ui.row().classes("gap-2 items-center"):
             _legend_line(COLLISION_COLOUR, dashed=True)
             ui.label("Collision").classes("text-caption")
+        with ui.row().classes("gap-2 items-center"):
+            _legend_line(HALFDUPLEX_COLOUR, dashed=True)
+            ui.label("Half-duplex drop").classes("text-caption")
 
     if not packets:
         return
@@ -776,6 +861,14 @@ def _main_content(state: AppState) -> None:
             "white-space: nowrap; overflow: hidden; text-overflow: ellipsis"
         )
 
+        # TX waterfall panel (collapsible)
+        with ui.element("div").classes("w-full").style(
+            "height: 0px; flex-shrink: 0; overflow: hidden;"
+            "border-top: 1px solid #dee2e6; background: #fafafa;"
+            "transition: height 0.2s ease"
+        ) as waterfall_wrapper:
+            waterfall_html = ui.html("").classes("w-full")
+
         # Timeline bar
         with ui.row().classes("w-full items-center gap-2 px-4").style(
             "height: 52px; flex-shrink: 0;"
@@ -785,6 +878,11 @@ def _main_content(state: AppState) -> None:
                 icon="play_arrow",
                 on_click=lambda: _toggle_play(state),
             ).props("flat dense round")
+
+            waterfall_btn = ui.button(
+                icon="waterfall_chart",
+                on_click=lambda: _toggle_waterfall(state),
+            ).props("flat dense round").tooltip("Toggle TX waterfall")
 
             ui.select(
                 options={
@@ -820,6 +918,9 @@ def _main_content(state: AppState) -> None:
         time_label=time_label,
         event_label=event_label,
         play_btn=play_btn,
+        waterfall_btn=waterfall_btn,
+        waterfall_wrapper=waterfall_wrapper,
+        waterfall_html=waterfall_html,
         timer=None,
     )
     state._trace_ui = tui
@@ -1030,6 +1131,296 @@ def _update_time_label(state: AppState) -> None:
     tui.time_label.set_text(f"t={rel_t:.1f}s")
 
 
+def _toggle_waterfall(state: AppState) -> None:
+    """Toggle the TX waterfall panel visibility."""
+    tui = getattr(state, "_trace_ui", None)
+    if tui is None:
+        return
+    state._waterfall_visible = not state._waterfall_visible
+    if state._waterfall_visible:
+        # Initial height — will be adjusted by _update_waterfall() on each render.
+        # Estimate: each receiver gets a header (18px) + ~2 sender rows (20px each).
+        topo = state.topology
+        n_nodes = len(topo.nodes) if topo else 3
+        h = max(80, min(n_nodes * 58, 300))
+        tui.waterfall_wrapper.style(
+            f"height: {h}px; flex-shrink: 0; overflow-y: auto;"
+            "border-top: 1px solid #dee2e6; background: #fafafa;"
+            "transition: height 0.2s ease"
+        )
+    else:
+        tui.waterfall_wrapper.style(
+            "height: 0px; flex-shrink: 0; overflow: hidden;"
+            "border-top: 1px solid #dee2e6; background: #fafafa;"
+            "transition: height 0.2s ease"
+        )
+    _update_map_overlay(state)
+
+
+# Sender colors for waterfall bars
+_WF_COLORS = [
+    "#1565c0", "#2e7d32", "#6a1b9a", "#e65100",
+    "#00838f", "#ad1457", "#4e342e", "#1a237e",
+    "#558b2f", "#bf360c", "#0277bd", "#880e4f",
+]
+
+# Broadcast step colors (shared between map overlay and waterfall)
+_STEP_HUES = [
+    "#1565c0", "#2e7d32", "#6a1b9a", "#e65100",
+    "#00838f", "#ad1457", "#4e342e", "#1a237e",
+]
+
+
+def _update_waterfall(
+    state: AppState,
+    waterfall_data: list[dict],
+    current_time: float,
+    map_id: int = 0,
+    positions: dict[str, tuple[float, float]] | None = None,
+    tx_id_to_step: dict[int, tuple[int, str]] | None = None,
+    rx_outcomes: dict[tuple[int, str], str] | None = None,
+    tx_id_to_pkt: dict[int, tuple[int, str]] | None = None,
+) -> None:
+    """Render TX waterfall bars grouped by receiver into the waterfall html widget.
+
+    Layout:
+        ── receiver_A ──────────────────────
+          sender_X  [===snr===]     [===snr===]
+          sender_Y       [======snr======]
+        ── receiver_B ──────────────────────
+          sender_X    [====snr====]
+          ...
+
+    Each receiver gets a header separator, then one sub-row per sender
+    that can reach it, so bars never overlap vertically.
+    """
+    tui = getattr(state, "_trace_ui", None)
+    if tui is None or not state._waterfall_visible:
+        return
+    if not waterfall_data:
+        tui.waterfall_html.set_content(
+            '<div style="color:#adb5bd;padding:4px 12px;font-size:0.75em">'
+            'No TX events in window</div>'
+        )
+        return
+
+    # Assign a stable colour per sender
+    sender_color: dict[str, str] = {}
+    color_idx = 0
+    for ev in waterfall_data:
+        s = ev["sender"]
+        if s not in sender_color:
+            sender_color[s] = _WF_COLORS[color_idx % len(_WF_COLORS)]
+            color_idx += 1
+
+    # Group events by receiver, then by sender within each receiver
+    by_rx: dict[str, dict[str, list[dict]]] = {}
+    for ev in waterfall_data:
+        rx = ev["receiver"]
+        sx = ev["sender"]
+        by_rx.setdefault(rx, {}).setdefault(sx, []).append(ev)
+    rx_order = sorted(by_rx.keys())
+
+    wf_window = 2.0
+    t_lo = current_time - wf_window
+    t_hi = current_time + wf_window
+    total_w = t_hi - t_lo
+
+    header_h = 18   # receiver separator line height
+    row_h = 20      # sender sub-row height
+    label_w = 140   # px reserved for sender label (wider for full names)
+
+    # Calculate total height: for each receiver, 1 header + N sender rows
+    total_h = 0
+    for rx in rx_order:
+        total_h += header_h + len(by_rx[rx]) * row_h
+    total_h = max(total_h, header_h + row_h)
+
+    parts = [
+        f'<div style="position:relative;width:100%;height:{total_h}px;'
+        f'font-family:monospace;font-size:0.7em">'
+    ]
+
+    # "Now" hairline
+    now_pct = (current_time - t_lo) / total_w * 100
+    parts.append(
+        f'<div style="position:absolute;left:{now_pct:.2f}%;top:0;bottom:0;'
+        f'width:1px;background:#f44336;z-index:10"></div>'
+    )
+
+    y = 0
+    alt = 0  # alternating background toggle
+    for rx in rx_order:
+        senders = by_rx[rx]
+        sender_order = sorted(senders.keys())
+
+        # ── Receiver header separator ──
+        parts.append(
+            f'<div data-node="{rx}" style="position:absolute;left:0;top:{y}px;right:0;'
+            f'height:{header_h}px;background:#e0e0e0;z-index:2;'
+            f'display:flex;align-items:center;padding-left:4px;'
+            f'font-weight:bold;font-size:0.9em;color:#333;cursor:pointer;'
+            f'border-bottom:1px solid #bdbdbd">'
+            f'{medium_name(rx)}</div>'
+        )
+        y += header_h
+
+        # Sender sub-rows
+        for sx in sender_order:
+            events = senders[sx]
+            # Row background
+            bg = "#f5f5f5" if alt % 2 == 0 else "#fafafa"
+            parts.append(
+                f'<div style="position:absolute;left:0;top:{y}px;right:0;'
+                f'height:{row_h}px;background:{bg};z-index:0"></div>'
+            )
+            # Sender label
+            color = sender_color[sx]
+            parts.append(
+                f'<div data-node="{sx}" style="position:absolute;left:4px;top:{y}px;'
+                f'width:{label_w}px;height:{row_h}px;line-height:{row_h}px;'
+                f'color:{color};font-size:0.85em;z-index:5;white-space:nowrap;'
+                f'overflow:hidden;text-overflow:ellipsis;cursor:pointer">'
+                f'{medium_name(sx)}</div>'
+            )
+            # TX bars
+            for ev in events:
+                bar_left = (ev["t_start"] - t_lo) / total_w * 100
+                bar_right = (ev["t_end"] - t_lo) / total_w * 100
+                bar_w = max(bar_right - bar_left, 0.3)
+                tx_id_val = ev["tx_id"]
+                # Per-receiver outcome detection
+                outcome = rx_outcomes.get((tx_id_val, rx)) if rx_outcomes else None
+                is_collision = outcome == "collision"
+                is_halfduplex = outcome == "halfduplex"
+                step_info = (
+                    tx_id_to_step.get(tx_id_val)
+                    if tx_id_to_step else None
+                )
+                is_selected = step_info is not None
+                if is_selected:
+                    step_num, step_clr = step_info
+                    border = (
+                        f"border:2px solid {step_clr};"
+                        f"box-shadow:0 0 6px {step_clr};"
+                    )
+                    opacity = "1.0"
+                elif is_collision:
+                    border = f"border:2px solid {COLLISION_COLOUR};"
+                    opacity = "0.75"
+                elif is_halfduplex:
+                    border = f"border:2px solid {HALFDUPLEX_COLOUR};"
+                    opacity = "0.75"
+                else:
+                    border = ""
+                    opacity = "0.55"
+                snr_val = ev.get("snr")
+                snr_lbl = f"{snr_val:.0f}dB" if snr_val is not None else ""
+                pkt_info = tx_id_to_pkt.get(tx_id_val) if tx_id_to_pkt else None
+                pkt_num = pkt_info[0] if pkt_info else "?"
+                pkt_type = pkt_info[1] if pkt_info else ""
+                # Bar label: step number for selected, pkt# + type + SNR otherwise
+                if is_selected and step_num > 0:
+                    _CIRCLED = "\u2776\u2777\u2778\u2779\u277a\u277b\u277c\u277d"
+                    bar_lbl = (
+                        _CIRCLED[step_num - 1]
+                        if step_num <= len(_CIRCLED)
+                        else str(step_num)
+                    )
+                elif is_collision:
+                    bar_lbl = f"\u2716#{pkt_num} {pkt_type} {snr_lbl}"
+                elif is_halfduplex:
+                    bar_lbl = f"\u23f8#{pkt_num} {pkt_type} {snr_lbl}"
+                else:
+                    bar_lbl = f"#{pkt_num} {pkt_type} {snr_lbl}"
+                # Tooltip: sender→receiver pkt#N type tx#N airtime SNR outcome
+                airtime_ms = (ev["t_end"] - ev["t_start"]) * 1000
+                outcome_lbl = ""
+                if is_collision:
+                    outcome_lbl = " COLLISION"
+                elif is_halfduplex:
+                    outcome_lbl = " HALF-DUPLEX"
+                title = (
+                    f"{medium_name(sx)}\u2192{medium_name(rx)}"
+                    f" pkt#{pkt_num} {pkt_type} tx#{tx_id_val}"
+                    f" {airtime_ms:.0f}ms {snr_lbl}{outcome_lbl}"
+                )
+                parts.append(
+                    f'<div class="wf-bar" style="position:absolute;'
+                    f'left:{bar_left:.2f}%;'
+                    f'top:{y + 2}px;width:{bar_w:.2f}%;height:{row_h - 4}px;'
+                    f'background:{color};opacity:{opacity};border-radius:2px;'
+                    f'{border}z-index:{4 if is_selected else 3};'
+                    f'overflow:hidden;cursor:pointer;'
+                    f'color:#fff;font-size:0.8em;line-height:{row_h - 4}px;'
+                    f'text-align:center;white-space:nowrap" '
+                    f'data-sender="{sx}" data-receiver="{rx}" '
+                    f'data-txid="{tx_id_val}" '
+                    f'title="{title}">'
+                    f'{bar_lbl}</div>'
+                )
+
+            y += row_h
+            alt += 1
+
+    parts.append('</div>')
+
+    # Update waterfall wrapper height to match content
+    wrapper_h = max(total_h, 40)
+    tui.waterfall_wrapper.style(
+        f"height: {min(wrapper_h, 300)}px; flex-shrink: 0; overflow-y: auto;"
+        "border-top: 1px solid #dee2e6; background: #fafafa;"
+        "transition: height 0.2s ease"
+    )
+    tui.waterfall_html.set_content("".join(parts))
+
+    # Attach click delegation via JS (runs after DOM update).
+    # Builds a positions lookup so fitBounds can zoom to the edge.
+    if positions and map_id:
+        pos_json = _json.dumps({
+            name: list(coord)
+            for name, coord in positions.items()
+        })
+        wf_el_id = tui.waterfall_html.id
+        click_js = f"""
+            (function() {{
+                var el = getElement({wf_el_id});
+                if (!el || !el.$el) return;
+                var root = el.$el;
+                var pos = {pos_json};
+                var mapId = {map_id};
+                // Remove previous handler to avoid stacking
+                if (root._wfHandler) root.removeEventListener('click', root._wfHandler);
+                root._wfHandler = function(e) {{
+                    var comp = getElement(mapId);
+                    if (!comp || !comp.map) return;
+                    // Check for node name click (receiver header or sender label)
+                    var n = e.target;
+                    while (n && n !== root && !n.dataset.node && !n.dataset.sender) n = n.parentElement;
+                    if (n && n.dataset.node) {{
+                        var p = pos[n.dataset.node];
+                        if (p) comp.map.setView(p, Math.max(comp.map.getZoom(), 15));
+                        return;
+                    }}
+                    // Bar click: zoom to sender→receiver edge
+                    if (n && n.dataset.sender) {{
+                        var s = n.dataset.sender, r = n.dataset.receiver;
+                        var ps = pos[s], pr = pos[r];
+                        if (ps && pr) {{
+                            comp.map.fitBounds(
+                                [[Math.min(ps[0],pr[0]), Math.min(ps[1],pr[1])],
+                                 [Math.max(ps[0],pr[0]), Math.max(ps[1],pr[1])]],
+                                {{padding: [40,40], maxZoom: 16}}
+                            );
+                        }}
+                    }}
+                }};
+                root.addEventListener('click', root._wfHandler);
+            }})();
+        """
+        tui.map.client.run_javascript(click_js)
+
+
 # ---------------------------------------------------------------------------
 # Map overlay update
 # ---------------------------------------------------------------------------
@@ -1075,6 +1466,7 @@ def _update_map_overlay(state: AppState) -> None:
     senders: set[str] = set()
     receivers: set[str] = set()
     collision_pairs: list[tuple[str, str]] = []
+    halfduplex_pairs: list[tuple[str, str]] = []
     flow_pairs: list[tuple[str, str]] = []
     active_descriptions: list[str] = []
 
@@ -1090,6 +1482,11 @@ def _update_map_overlay(state: AppState) -> None:
         elif ev["type"] == "collision":
             collision_pairs.append((ev["sender"], ev["receiver"]))
             desc = f"{short_name(ev['sender'])}\u2192{short_name(ev['receiver'])} [COLLISION]"
+            if desc not in active_descriptions:
+                active_descriptions.append(desc)
+        elif ev["type"] == "halfduplex":
+            halfduplex_pairs.append((ev["sender"], ev["receiver"]))
+            desc = f"{short_name(ev['sender'])}\u2192{short_name(ev['receiver'])} [HALF-DUPLEX]"
             if desc not in active_descriptions:
                 active_descriptions.append(desc)
 
@@ -1200,10 +1597,160 @@ def _update_map_overlay(state: AppState) -> None:
         if pos_s and pos_r:
             collision_coords.append([list(pos_s), list(pos_r)])
 
+    # --- Build half-duplex polyline coordinates ---
+    halfduplex_coords = []
+    for sender, receiver in halfduplex_pairs:
+        pos_s = positions.get(sender)
+        pos_r = positions.get(receiver)
+        if pos_s and pos_r:
+            halfduplex_coords.append([list(pos_s), list(pos_r)])
+
+    # --- Build propagation overlay data for selected packet ---
+    prop_lines = []   # [{coords: [[lat,lon],[lat,lon]], color: str, step: int}]
+    prop_markers = []  # [{pos: [lat,lon], label: str, color: str}]
+    prop_collisions = []  # [{pos: [lat,lon]}]
+    sel_pkt_idx = getattr(state, "_selected_pkt_idx", None)
+
+    if sel_pkt_idx is not None and 0 <= sel_pkt_idx < len(packets):
+        sel_pkt = packets[sel_pkt_idx]
+        steps = broadcast_steps(sel_pkt)
+        for step_i, step in enumerate(steps):
+            color = _STEP_HUES[step_i % len(_STEP_HUES)]
+            for hop in step:
+                pos_s = positions.get(hop["sender"])
+                pos_r = positions.get(hop["receiver"])
+                if pos_s and pos_r:
+                    prop_lines.append({
+                        "coords": [list(pos_s), list(pos_r)],
+                        "color": color,
+                    })
+            # Step number marker at midpoint of first hop
+            if step:
+                first_hop = step[0]
+                p_s = positions.get(first_hop["sender"])
+                p_r = positions.get(first_hop["receiver"])
+                if p_s and p_r:
+                    mid = [(p_s[0] + p_r[0]) / 2, (p_s[1] + p_r[1]) / 2]
+                    prop_markers.append({
+                        "pos": mid,
+                        "label": str(step_i + 1),
+                        "color": color,
+                    })
+
+        # Collision X-marks
+        for col in sel_pkt.get("collisions", []):
+            p_s = positions.get(col["sender"])
+            p_r = positions.get(col["receiver"])
+            if p_s and p_r:
+                mid = [(p_s[0] + p_r[0]) / 2, (p_s[1] + p_r[1]) / 2]
+                prop_collisions.append({"pos": mid})
+
+        # Half-duplex X-marks (orange)
+        for hd in sel_pkt.get("halfduplex", []):
+            p_s = positions.get(hd["sender"])
+            p_r = positions.get(hd["receiver"])
+            if p_s and p_r:
+                mid = [(p_s[0] + p_r[0]) / 2, (p_s[1] + p_r[1]) / 2]
+                prop_collisions.append({"pos": mid, "color": HALFDUPLEX_COLOUR})
+
+    # --- Map selected packet's tx_ids to broadcast step numbers ---
+    # tx_id_to_step: {tx_id: (step_number, step_color)} for waterfall highlight
+    tx_id_to_step: dict[int, tuple[int, str]] = {}
+    if sel_pkt_idx is not None and 0 <= sel_pkt_idx < len(packets):
+        sel_pkt = packets[sel_pkt_idx]
+        steps = broadcast_steps(sel_pkt)
+        for step_i, step in enumerate(steps):
+            step_color = _STEP_HUES[step_i % len(_STEP_HUES)]
+            for hop in step:
+                tid = hop.get("tx_id")
+                if tid is not None:
+                    tx_id_to_step[tid] = (step_i + 1, step_color)
+        # Also include collision tx_ids (step 0 = unknown step)
+        for col in sel_pkt.get("collisions", []):
+            tid = col.get("tx_id")
+            if tid is not None and tid not in tx_id_to_step:
+                tx_id_to_step[tid] = (0, COLLISION_COLOUR)
+
+    # --- Build per-receiver outcome lookup for waterfall ---
+    # (tx_id, receiver) -> "collision" | "halfduplex"
+    rx_outcomes: dict[tuple[int, str], str] = {}
+    # tx_id -> (pkt_num 1-based, short_type_name)
+    tx_id_to_pkt: dict[int, tuple[int, str]] = {}
+    if state.trace:
+        trace_packets = state.trace.get("packets", [])
+        for pkt_idx_o, pkt_o in enumerate(trace_packets):
+            pkt_num = pkt_idx_o + 1
+            pkt_type = pkt_o.get("payload_type_name", "?")[:6]
+            for hop in pkt_o.get("hops", []):
+                tid = hop.get("tx_id")
+                if tid is not None and tid not in tx_id_to_pkt:
+                    tx_id_to_pkt[tid] = (pkt_num, pkt_type)
+            for col in pkt_o.get("collisions", []):
+                tid = col.get("tx_id")
+                rx_name = col.get("receiver")
+                if tid is not None and rx_name:
+                    rx_outcomes[(tid, rx_name)] = "collision"
+                if tid is not None and tid not in tx_id_to_pkt:
+                    tx_id_to_pkt[tid] = (pkt_num, pkt_type)
+            for hd in pkt_o.get("halfduplex", []):
+                tid = hd.get("tx_id")
+                rx_name = hd.get("receiver")
+                if tid is not None and rx_name:
+                    rx_outcomes[(tid, rx_name)] = "halfduplex"
+                if tid is not None and tid not in tx_id_to_pkt:
+                    tx_id_to_pkt[tid] = (pkt_num, pkt_type)
+
+    # --- Build waterfall data (receiver-centric) ---
+    waterfall_data = []
+    if state._waterfall_visible:
+        tx_events = state.trace.get("tx_events", {})
+        if tx_events and topo:
+            # Build sender → {(receiver, snr)} adjacency from topology edges
+            sender_to_receivers: dict[str, list[tuple[str, float]]] = {}
+            for edge in topo.edges:
+                # a→b direction: SNR as seen by b
+                snr_ab = edge.snr
+                if edge.a_to_b and edge.a_to_b.snr is not None:
+                    snr_ab = edge.a_to_b.snr
+                # b→a direction: SNR as seen by a
+                snr_ba = edge.snr
+                if edge.b_to_a and edge.b_to_a.snr is not None:
+                    snr_ba = edge.b_to_a.snr
+                sender_to_receivers.setdefault(edge.a, []).append((edge.b, snr_ab))
+                sender_to_receivers.setdefault(edge.b, []).append((edge.a, snr_ba))
+
+            wf_window = 2.0
+            t_lo = t - wf_window
+            t_hi = t + wf_window
+            for tid_str, ev in tx_events.items():
+                t_start_ev = ev.get("t_start", 0)
+                t_end_ev = ev.get("t_end")
+                if t_end_ev is None:
+                    continue
+                if t_end_ev < t_lo or t_start_ev > t_hi:
+                    continue
+                sender_name = ev["sender"]
+                tid = int(tid_str)
+                for rx, snr_val in sender_to_receivers.get(sender_name, ()):
+                    waterfall_data.append({
+                        "sender": sender_name,
+                        "receiver": rx,
+                        "t_start": t_start_ev,
+                        "t_end": t_end_ev,
+                        "tx_id": tid,
+                        "snr": snr_val,
+                    })
+            waterfall_data.sort(key=lambda x: x["t_start"])
+
     # --- Single JS call to update everything ---
     styles_json = _json.dumps(styles)
     flow_json = _json.dumps(flow_coords)
     col_json = _json.dumps(collision_coords)
+    hd_json = _json.dumps(halfduplex_coords)
+    prop_lines_json = _json.dumps(prop_lines)
+    prop_markers_json = _json.dumps(prop_markers)
+    prop_col_json = _json.dumps(prop_collisions)
+    waterfall_json = _json.dumps(waterfall_data)
     map_id = tui.map_id
 
     js = f"""
@@ -1261,7 +1808,78 @@ def _update_map_overlay(state: AppState) -> None:
                 pl.addTo(map);
                 window._wb_col.push(pl);
             }}
+
+            // Half-duplex edges (orange dotted)
+            if (window._wb_hd) {{
+                window._wb_hd.forEach(function(l) {{ map.removeLayer(l); }});
+            }}
+            window._wb_hd = [];
+            var hds = {hd_json};
+            for (var i = 0; i < hds.length; i++) {{
+                var pl = L.polyline(hds[i], {{
+                    color: '{HALFDUPLEX_COLOUR}',
+                    weight: 4,
+                    dashArray: '2,6',
+                    opacity: 0.9
+                }});
+                pl.addTo(map);
+                window._wb_hd.push(pl);
+            }}
+
+            // Propagation overlay (selected packet journey)
+            if (window._wb_prop) {{
+                window._wb_prop.forEach(function(l) {{ map.removeLayer(l); }});
+            }}
+            window._wb_prop = [];
+            var propLines = {prop_lines_json};
+            for (var i = 0; i < propLines.length; i++) {{
+                var pl = L.polyline(propLines[i].coords, {{
+                    color: propLines[i].color,
+                    weight: 5,
+                    opacity: 0.85
+                }});
+                pl.addTo(map);
+                window._wb_prop.push(pl);
+            }}
+            var propMarkers = {prop_markers_json};
+            for (var i = 0; i < propMarkers.length; i++) {{
+                var pm = propMarkers[i];
+                var icon = L.divIcon({{
+                    html: '<div style="background:'+pm.color+';color:#fff;'
+                        +'width:20px;height:20px;border-radius:50%;display:flex;'
+                        +'align-items:center;justify-content:center;font-size:11px;'
+                        +'font-weight:bold;border:2px solid #fff;box-shadow:0 0 4px rgba(0,0,0,0.4)">'
+                        +pm.label+'</div>',
+                    className: '',
+                    iconSize: [20, 20],
+                    iconAnchor: [10, 10]
+                }});
+                var m = L.marker(pm.pos, {{icon: icon, interactive: false}});
+                m.addTo(map);
+                window._wb_prop.push(m);
+            }}
+            var propCols = {prop_col_json};
+            for (var i = 0; i < propCols.length; i++) {{
+                var pc = propCols[i];
+                var xColor = pc.color || '{COLLISION_COLOUR}';
+                var xIcon = L.divIcon({{
+                    html: '<div style="color:'+xColor+';font-size:22px;'
+                        +'font-weight:bold;text-shadow:0 0 3px #fff">\u2716</div>',
+                    className: '',
+                    iconSize: [22, 22],
+                    iconAnchor: [11, 11]
+                }});
+                var xm = L.marker(pc.pos, {{icon: xIcon, interactive: false}});
+                xm.addTo(map);
+                window._wb_prop.push(xm);
+            }}
         }})();
     """
 
     tui.map.client.run_javascript(js)
+
+    # Update waterfall panel
+    _update_waterfall(state, waterfall_data, t,
+                      map_id=tui.map_id, positions=tui.positions,
+                      tx_id_to_step=tx_id_to_step,
+                      rx_outcomes=rx_outcomes, tx_id_to_pkt=tx_id_to_pkt)

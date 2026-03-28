@@ -96,7 +96,8 @@ class PacketRouter:
         tx_id: Optional[int] = None
         if self._tracer is not None:
             tx_id = self._tracer.record_tx(sender_name, hex_data, tx_start,
-                                           airtime_ms=airtime_ms)
+                                           airtime_ms=airtime_ms,
+                                           tx_end=tx_end)
 
         # Register with the channel model (contention detection).
         if self._channel is not None and tx_id is not None:
@@ -202,10 +203,20 @@ class PacketRouter:
                 and tx_end is not None):
             rx_start = tx_start + link.latency_ms / 1000.0
             rx_end   = tx_end   + link.latency_ms / 1000.0
-            if self._channel.is_receiver_busy(receiver_name, rx_start, rx_end):
+            busy_info = self._channel.is_receiver_busy(
+                receiver_name, rx_start, rx_end
+            )
+            if busy_info is not None:
+                blocker_tx_id, _, _ = busy_info
                 self._metrics.record_halfduplex_drop(sender, receiver_name)
                 log.debug("[router] half-duplex drop %s->%s (receiver busy)",
                           sender, receiver_name)
+                if self._tracer is not None:
+                    t_hd = asyncio.get_event_loop().time()
+                    self._tracer.record_halfduplex(
+                        sender, receiver_name, hex_data, t_hd, tx_id,
+                        blocker_tx_id=blocker_tx_id,
+                    )
                 return
 
         # 4. RF collision check (contention model).
@@ -213,14 +224,21 @@ class PacketRouter:
                 and tx_id is not None
                 and tx_start is not None
                 and tx_end is not None):
-            if self._channel.is_lost(sender, receiver_name,
-                                     tx_start, tx_end, tx_id):
+            collision_info = self._channel.is_lost(
+                sender, receiver_name, tx_start, tx_end, tx_id
+            )
+            if collision_info is not None:
+                interferer_name, interferer_tx_id, overlap_s = collision_info
                 self._metrics.record_collision(sender, receiver_name)
-                log.debug("[router] collision %s→%s", sender, receiver_name)
+                log.debug("[router] collision %s→%s (interferer=%s, overlap=%.1fms)",
+                          sender, receiver_name, interferer_name, overlap_s * 1000)
                 if self._tracer is not None:
                     t_col = asyncio.get_event_loop().time()
                     self._tracer.record_collision(
-                        sender, receiver_name, hex_data, t_col, tx_id
+                        sender, receiver_name, hex_data, t_col, tx_id,
+                        interferer=interferer_name,
+                        interferer_tx_id=interferer_tx_id,
+                        overlap_s=overlap_s,
                     )
                 return
 

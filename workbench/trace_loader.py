@@ -45,6 +45,19 @@ def flatten_events(trace: dict) -> list[dict]:
                 "sender": col["sender"],
                 "receiver": col["receiver"],
                 "tx_id": col.get("tx_id"),
+                "interferer": col.get("interferer"),
+                "interferer_tx_id": col.get("interferer_tx_id"),
+                "overlap_s": col.get("overlap_s", 0.0),
+            })
+        for hd in pkt.get("halfduplex", []):
+            events.append({
+                "type": "halfduplex",
+                "t": hd["t"],
+                "pkt_idx": pkt_idx,
+                "sender": hd["sender"],
+                "receiver": hd["receiver"],
+                "tx_id": hd.get("tx_id"),
+                "blocker_tx_id": hd.get("blocker_tx_id"),
             })
     events.sort(key=lambda e: e["t"])
     return events
@@ -83,6 +96,7 @@ def compute_node_trace_stats(trace: dict) -> dict[str, dict]:
                 "packets_originated": [],
                 "packets_transited": [],
                 "collisions_involved": 0,
+                "halfduplex_involved": 0,
             }
         return stats[name]
 
@@ -108,6 +122,9 @@ def compute_node_trace_stats(trace: dict) -> dict[str, dict]:
         for col in pkt.get("collisions", []):
             _ensure(col["receiver"])["collisions_involved"] += 1
 
+        for hd in pkt.get("halfduplex", []):
+            _ensure(hd["receiver"])["halfduplex_involved"] += 1
+
     return stats
 
 
@@ -124,7 +141,8 @@ def compute_edge_trace_stats(trace: dict) -> dict[tuple[str, str], dict]:
 
     def _ensure(k: tuple[str, str]) -> dict:
         if k not in stats:
-            stats[k] = {"hop_count": 0, "collision_count": 0, "packets": []}
+            stats[k] = {"hop_count": 0, "collision_count": 0,
+                        "halfduplex_count": 0, "packets": []}
         return stats[k]
 
     for pkt_idx, pkt in enumerate(trace.get("packets", [])):
@@ -137,6 +155,9 @@ def compute_edge_trace_stats(trace: dict) -> dict[tuple[str, str], dict]:
         for col in pkt.get("collisions", []):
             k = _key(col["sender"], col["receiver"])
             _ensure(k)["collision_count"] += 1
+        for hd in pkt.get("halfduplex", []):
+            k = _key(hd["sender"], hd["receiver"])
+            _ensure(k)["halfduplex_count"] += 1
 
     return stats
 
@@ -159,6 +180,7 @@ def compute_trace_stats(trace: dict) -> dict:
     total_hops = sum(p.get("witness_count", 0) for p in packets)
     avg_w = total_hops / n
     n_col = sum(len(p.get("collisions", [])) for p in packets)
+    n_hd = sum(len(p.get("halfduplex", [])) for p in packets)
     n_direct = n - n_flood
 
     result: dict = {
@@ -166,6 +188,7 @@ def compute_trace_stats(trace: dict) -> dict:
         "flood_pct": 100.0 * n_flood / n,
         "avg_witnesses": avg_w,
         "n_collisions": n_col,
+        "n_halfduplex": n_hd,
         "total_hops": total_hops,
         "n_flood": n_flood,
         "n_direct": n_direct,
