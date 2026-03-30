@@ -1,3 +1,5 @@
+Moving away from this approach - as it is TOO slow, soon a full C++ implementation to be presented - with different approach.
+
 # meshcore_sim
 
 Fork from wonderfull job of Matthew - [Original Reop](https://github.com/matthewdgreen/meshcore_sim) 
